@@ -1,4 +1,7 @@
-from devito import Function, TimeFunction, memoized_meth
+import numpy as np
+from sympy import cos, sin
+
+from devito import Function, TimeFunction, memoized_meth, Inc, Eq, DefaultDimension, ConditionalDimension, solve, Operator
 from examples.seismic import PointSource, Receiver
 from examples.seismic.acoustic.operators import (
     ForwardOperator, AdjointOperator, GradientOperator, BornOperator
@@ -209,3 +212,102 @@ class AcousticWaveSolver(object):
         summary = self.op_born().apply(dm=dmin, u=u, U=U, src=src, rec=rec,
                                        m=m, dt=kwargs.pop('dt', self.dt), **kwargs)
         return rec, u, U, summary
+
+    def forward_freq_modeling(self, freq=None, factor=None, **kwargs):
+        # Forward modeling with on-the-fly DFT of forward wavefields
+        # Parameters
+        nt = self.source.nt
+        dt = self.model.critical_dt
+        m, damp = self.model.m, self.model.damp
+        nfreq = len(freq)
+        freq_dim = DefaultDimension(name='freq_dim', default_value=nfreq)
+        time = self.model.grid.time_dim
+        if factor is None:
+            factor = int(1 / (dt*4*np.max(freq)))
+        if factor==1:
+            tsave = time
+        else:
+            tsave = ConditionalDimension(name='tsave', parent=self.model.grid.time_dim, factor=factor)
+
+        # Create wavefields
+        u = TimeFunction(name='u', grid=self.model.grid, time_order=2, space_order=self.space_order)
+        f = Function(name='f', dimensions=(freq_dim,), shape=(nfreq,))
+        f.data[:] = freq[:]
+        ufr = Function(name='ufr', dimensions=(freq_dim,) + u.indices[1:], shape=(nfreq,) + u.shape[1:])
+        ufi = Function(name='ufi', dimensions=(freq_dim,) + u.indices[1:], shape=(nfreq,) + u.shape[1:])
+
+        # Set up PDE and rearrange
+        eqn = m * u.dt2 - u.laplace + damp * u.dt
+        stencil = solve(eqn, u.forward)
+        expression = [Eq(u.forward, stencil)]
+
+        # Source symbol with input wavelet
+        src = PointSource(name='src', grid=self.model.grid,
+                          time_range=self.source.time_range,
+                          coordinates=self.source.coordinates.data)
+        src_term = src.inject(field=u.forward, offset=self.model.nbpml, expr=src * dt**2 / m)
+
+        # Data is sampled at receiver locations
+        rec = Receiver(name='rec', grid=self.model.grid,
+                       time_range=self.receiver.time_range,
+                       coordinates=self.receiver.coordinates.data)
+        rec_term = rec.interpolate(expr=u, offset=self.model.nbpml)
+
+        # Create operator and run
+        expression += src_term + rec_term
+        expression += [Inc(ufr, factor*u*cos(2*np.pi*f*tsave*factor*dt))]
+        expression += [Inc(ufi, - factor*u*sin(2*np.pi*f*tsave*factor*dt))]
+        subs = self.model.spacing_map
+        subs[u.grid.time_dim.spacing] = self.model.critical_dt
+        op = Operator(expression, subs=subs, dse='advanced', dle='advanced')
+        op(**kwargs)
+
+        return rec, ufr, ufi
+
+
+    def adjoint_freq_born(self, recin, freq, factor, ufr, ufi, **kwargs):
+
+        # Parameters
+        nt = self.source.nt
+        dt = self.model.critical_dt
+        m, damp = self.model.m, self.model.damp
+        nfreq = ufr.shape[0]
+        time = self.model.grid.time_dim
+        if factor is None:
+            factor = int(1 / (dt*4*np.max(freq)))
+        if factor==1:
+            tsave = time
+        else:
+            tsave = ConditionalDimension(name='tsave', parent=self.model.grid.time_dim, factor=factor)
+        dtf = factor * dt
+        ntf = factor / nt
+        print("DFT subsampling factor: ", factor)
+
+        # Create the forward and adjoint wavefield
+        v = TimeFunction(name='v', grid=self.model.grid, time_order=2, space_order=self.space_order)
+        f = Function(name='f', dimensions=(ufr.indices[0],), shape=(nfreq,))
+        f.data[:] = freq[:]
+        gradient = Function(name="grad", grid=self.model.grid)
+
+        # Set up PDE and rearrange
+        eqn = m * v.dt2 - v.laplace - damp * v.dt
+        stencil = solve(eqn, v.backward)
+        expression = [Eq(v.backward, stencil)]
+
+        # Data at receiver locations as adjoint source
+        rec = Receiver(name='rec', grid=self.model.grid,
+                       time_range=self.receiver.time_range,
+                       coordinates=self.receiver.coordinates.data)
+        adj_src = rec.inject(field=v.backward, offset=self.model.nbpml, expr=rec * dt**2 / m)
+
+        # Gradient update
+        gradient_update = [Eq(gradient, gradient + (2*np.pi*f)**2/nt*(ufr*cos(2*np.pi*f*tsave*dtf) - ufi*sin(2*np.pi*f*tsave*dtf))*v)]
+
+        # Create operator and run
+        expression += adj_src + gradient_update
+        subs = self.model.spacing_map
+        subs[v.grid.time_dim.spacing] = dt
+        op = Operator(expression, subs=subs, dse='advanced', dle='advanced')
+
+        op(rec=recin, **kwargs)
+        return gradient

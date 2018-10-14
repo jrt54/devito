@@ -58,7 +58,7 @@ def run(shape=(50, 50, 50), spacing=(20.0, 20.0, 20.0), tn=1000.0,
     save = full_run and not checkpointing
     # Define receiver geometry (spread across x, just below surface)
     rec, u, summary = solver.forward(save=save, autotune=autotune)
-
+    d, ufr, ufi = solver.forward_freq_modeling(freq=(0.003, 0.004, 0.005), factor=10)
     if constant:
         # With  a new m as Constant
         m0 = Constant(name="m", value=.25, dtype=np.float32)
