@@ -18,10 +18,10 @@ from devito.mpi import MPI
 from devito.parameters import configuration
 from devito.symbolics import Add, FieldFromPointer
 from devito.finite_differences import Differentiable, generate_fd_shortcuts
-from devito.tools import (EnrichedTuple, ReducerMap, as_tuple, flatten, is_integer,
-                          ctypes_to_cstr, memoized_meth, dtype_to_ctype)
+from devito.tools import (EnrichedTuple, ReducerMap, ArgProvider, as_tuple,
+                          flatten, is_integer, ctypes_to_cstr, memoized_meth,
+                          dtype_to_ctype)
 from devito.types.dimension import Dimension
-from devito.types.args import ArgProvider
 from devito.types.basic import AbstractCachedFunction
 from devito.types.utils import Buffer, NODE, CELL
 
@@ -190,6 +190,10 @@ class DiscreteFunction(AbstractCachedFunction, ArgProvider):
         return self._staggered
 
     @property
+    def stencil(self):
+        return self
+
+    @property
     def coefficients(self):
         """Form of the coefficients of the function."""
         return self._coefficients
@@ -201,10 +205,6 @@ class DiscreteFunction(AbstractCachedFunction, ArgProvider):
         else:
             raise ValueError("Function was not declared with symbolic "
                              "coefficients.")
-
-    @cached_property
-    def stencil(self):
-        return self
 
     @cached_property
     def shape(self):
@@ -885,27 +885,27 @@ class Function(DiscreteFunction, Differentiable):
     First-order derivatives through centered finite-difference approximations
 
     >>> f.dx
-    -f(x, y)/h_x + f(x + h_x, y)/h_x
+    Derivative(f(x, y), x)
     >>> f.dy
-    -f(x, y)/h_y + f(x, y + h_y)/h_y
+    Derivative(f(x, y), y)
     >>> g.dx
-    -0.5*g(x - h_x, y)/h_x + 0.5*g(x + h_x, y)/h_x
+    Derivative(g(x, y), x)
     >>> (f + g).dx
-    -(f(x, y) + g(x, y))/h_x + (f(x + h_x, y) + g(x + h_x, y))/h_x
+    Derivative(f(x, y) + g(x, y), x)
 
     First-order derivatives through left/right finite-difference approximations
 
     >>> f.dxl
-    f(x, y)/h_x - f(x - h_x, y)/h_x
+    Derivative(f(x, y), x)
     >>> g.dxl
-    1.5*g(x, y)/h_x + 0.5*g(x - 2*h_x, y)/h_x - 2.0*g(x - h_x, y)/h_x
+    Derivative(g(x, y), x)
     >>> f.dxr
-    -f(x, y)/h_x + f(x + h_x, y)/h_x
+    Derivative(f(x, y), x)
 
     Second-order derivative through centered finite-difference approximation
 
     >>> g.dx2
-    -2.0*g(x, y)/h_x**2 + g(x - h_x, y)/h_x**2 + g(x + h_x, y)/h_x**2
+    Derivative(g(x, y), (x, 2))
 
     Notes
     -----
@@ -1130,11 +1130,11 @@ class TimeFunction(Function):
     First-order derivatives through centered finite-difference approximations
 
     >>> f.dx
-    -f(t, x, y)/h_x + f(t, x + h_x, y)/h_x
+    Derivative(f(t, x, y), x)
     >>> f.dt
-    -f(t, x, y)/dt + f(t + dt, x, y)/dt
+    Derivative(f(t, x, y), t)
     >>> g.dt
-    -0.5*g(t - dt, x, y)/dt + 0.5*g(t + dt, x, y)/dt
+    Derivative(g(t, x, y), t)
 
     When using the alternating buffer protocol, the size of the time dimension
     is given by ``time_order + 1``
