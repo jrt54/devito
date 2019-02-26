@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from conftest import skipif, EVAL, x, y, z  # noqa
-from devito import (Eq, Inc, Constant, Function, TimeFunction, SparseTimeFunction,  # noqa
+from devito import (Eq, Inc, Constant, Function, TimeFunction, SparseFunction,  # noqa
                     Grid, Operator, switchconfig, configuration)
 from devito.ir import Stencil, FlowGraph, FindSymbols, retrieve_iteration_tree
 from devito.dle import BlockDimension
@@ -46,7 +46,7 @@ def run_acoustic_forward(dse=None):
     geometry = AcquisitionGeometry(model, rec_coordinates, src_coordinates,
                                    t0=t0, tn=tn, src_type='Ricker', f0=0.010)
 
-    solver = AcousticWaveSolver(model, geometry, dse=dse, dle='noop')
+    solver = AcousticWaveSolver(model, geometry, dse=dse, dle='basic')
     rec, u, _ = solver.forward(save=False)
 
     return u, rec
@@ -139,30 +139,18 @@ def test_tti_rewrite_aggressive(tti_nodse):
     # * four Arrays are allocated on the heap
     # * two Arrays are allocated on the stack and only appear within an efunc
     arrays = [i for i in FindSymbols().visit(op) if i.is_Array]
-    assert len(arrays) == 3
+    assert len(arrays) == 4
     assert all(i._mem_heap and not i._mem_external for i in arrays)
     arrays = [i for i in FindSymbols().visit(op._func_table['bf0'].root) if i.is_Array]
-    assert len(arrays) == 5
+    assert len(arrays) == 6
     assert all(not i._mem_external for i in arrays)
-    assert len([i for i in arrays if i._mem_heap]) == 3
+    assert len([i for i in arrays if i._mem_heap]) == 4
     assert len([i for i in arrays if i._mem_stack]) == 2
-
-
-@skipif(['nompi'])
-@pytest.mark.parallel(mode=[(1, 'full')])
-def test_tti_rewrite_aggressive_wmpi():
-    tti_nodse = tti_operator(dse=None)
-    rec0, u0, v0, _ = tti_nodse.forward(kernel='centered', save=False)
-    tti_agg = tti_operator(dse='aggressive')
-    rec1, u1, v1, _ = tti_agg.forward(kernel='centered', save=False)
-
-    assert np.allclose(v0.data, v1.data, atol=10e-1)
-    assert np.allclose(rec0.data, rec1.data, atol=10e-1)
 
 
 @switchconfig(profiling='advanced')
 @pytest.mark.parametrize('kernel,space_order,expected', [
-    ('centered', 8, 148), ('centered', 16, 264)
+    ('centered', 8, 178), ('centered', 16, 320)
 ])
 def test_tti_rewrite_aggressive_opcounts(kernel, space_order, expected):
     operator = tti_operator(dse='aggressive', space_order=space_order)
@@ -178,7 +166,7 @@ def test_scheduling_after_rewrite():
     grid = Grid((10, 10))
     u1 = TimeFunction(name="u1", grid=grid, save=10, time_order=2)
     u2 = TimeFunction(name="u2", grid=grid, time_order=2)
-    sf1 = SparseTimeFunction(name='sf1', grid=grid, npoint=1, nt=10)
+    sf1 = SparseFunction(name='sf1', grid=grid, npoint=1, ntime=10)
     const = Function(name="const", grid=grid, space_order=2)
 
     # Deliberately inject into u1, rather than u1.forward, to create a WAR
@@ -374,15 +362,12 @@ def test_estimate_cost(fa, fb, fc, t0, t1, t2, expr, expected):
 
 
 @pytest.mark.parametrize('exprs,exp_u,exp_v', [
-    (['Eq(s, 0, (x, y))', 'Eq(s, s + 4, (x, y))', 'Eq(u, s)'], 4, 0),
-    (['Eq(s, 0, (x, y))', 'Eq(s, s + s + 4, (x, y))', 'Eq(s, s + 4, (x, y))',
-      'Eq(u, s)'], 8, 0),
-    (['Eq(s, 0, (x, y))', 'Inc(s, 4, (x, y))', 'Eq(u, s)'], 4, 0),
-    (['Eq(s, 0, (x, y))', 'Inc(s, 4, (x, y))', 'Eq(v, s)', 'Eq(u, s)'], 4, 4),
-    (['Eq(s, 0, (x, y))', 'Inc(s, 4, (x, y))', 'Eq(v, s)',
-      'Eq(s, s + 4, (x, y))', 'Eq(u, s)'], 8, 4),
-    (['Eq(s, 0, (x, y))', 'Inc(s, 4, (x, y))', 'Eq(v, s)',
-      'Inc(s, 4, (x, y))', 'Eq(u, s)'], 8, 4),
+    (['Eq(s, 0)', 'Eq(s, s + 4)', 'Eq(u, s)'], 4, 0),
+    (['Eq(s, 0)', 'Eq(s, s + s + 4)', 'Eq(s, s + 4)', 'Eq(u, s)'], 8, 0),
+    (['Eq(s, 0)', 'Inc(s, 4)', 'Eq(u, s)'], 4, 0),
+    (['Eq(s, 0)', 'Inc(s, 4)', 'Eq(v, s)', 'Eq(u, s)'], 4, 4),
+    (['Eq(s, 0)', 'Inc(s, 4)', 'Eq(v, s)', 'Eq(s, s + 4)', 'Eq(u, s)'], 8, 4),
+    (['Eq(s, 0)', 'Inc(s, 4)', 'Eq(v, s)', 'Inc(s, 4)', 'Eq(u, s)'], 8, 4),
     (['Eq(u, 0)', 'Inc(u, 4)', 'Eq(v, u)', 'Inc(u, 4)'], 8, 4),
     (['Eq(u, 1)', 'Eq(v, 4)', 'Inc(u, v)', 'Inc(v, u)'], 5, 9),
 ])
@@ -392,7 +377,6 @@ def test_makeit_ssa(exprs, exp_u, exp_v):
     that push hard on the `makeit_ssa` utility function.
     """
     grid = Grid(shape=(4, 4))
-    x, y = grid.dimensions  # noqa
     u = Function(name='u', grid=grid)  # noqa
     v = Function(name='v', grid=grid)  # noqa
     s = Scalar(name='s')  # noqa
@@ -406,25 +390,3 @@ def test_makeit_ssa(exprs, exp_u, exp_v):
 
     assert np.all(u.data == exp_u)
     assert np.all(v.data == exp_v)
-
-
-@pytest.mark.parametrize('dse', ['noop', 'basic', 'advanced', 'aggressive'])
-@pytest.mark.parametrize('dle', ['noop', 'advanced', 'speculative'])
-def test_time_dependent_split(dse, dle):
-    grid = Grid(shape=(10, 10))
-    u = TimeFunction(name='u', grid=grid, time_order=2, space_order=2, save=3)
-    v = TimeFunction(name='v', grid=grid, time_order=2, space_order=0, save=3)
-
-    # The second equation needs a full loop over x/y for u then
-    # a full one over x.y for v
-    eq = [Eq(u.forward, 2 + grid.time_dim),
-          Eq(v.forward, u.forward.dx + u.forward.dy + 1)]
-    op = Operator(eq, dse=dse, dle=dle)
-
-    trees = retrieve_iteration_tree(op)
-    assert len(trees) == 2
-
-    op()
-
-    assert np.allclose(u.data[2, :, :], 3.0)
-    assert np.allclose(v.data[1, 1:-1, 1:-1], 1.0)
