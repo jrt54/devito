@@ -13,9 +13,8 @@ from cgen import Struct, Value
 
 from devito.data import default_allocator
 from devito.symbolics import Add
-from devito.tools import (EnrichedTuple, Pickable, ctypes_to_cstr, dtype_to_cstr,
-                          dtype_to_ctype)
-from devito.types.args import ArgProvider
+from devito.tools import (ArgProvider, EnrichedTuple, Evaluable, Pickable,
+                          ctypes_to_cstr, dtype_to_cstr, dtype_to_ctype)
 
 __all__ = ['Symbol', 'Scalar', 'Array', 'Indexed', 'Object', 'LocalObject',
            'CompositeObject']
@@ -192,7 +191,7 @@ class Cached(object):
         return hash(type(self))
 
 
-class AbstractSymbol(sympy.Symbol, Basic, Pickable):
+class AbstractSymbol(sympy.Symbol, Basic, Pickable, Evaluable):
     """
     Base class for dimension-free symbols, only cached by SymPy.
 
@@ -356,7 +355,7 @@ class Symbol(AbstractCachedSymbol):
         return kwargs.get('dtype', np.int32)
 
 
-class Scalar(Symbol, ArgProvider):
+class Scalar(Symbol):
     """
     Symbol representing a scalar.
 
@@ -436,7 +435,7 @@ class AbstractFunction(sympy.Function, Basic, Pickable):
     is_AbstractFunction = True
 
 
-class AbstractCachedFunction(AbstractFunction, Cached):
+class AbstractCachedFunction(AbstractFunction, Cached, Evaluable):
     """
     Base class for tensor symbols, cached by both Devito and Sympy.
 
@@ -893,21 +892,11 @@ class Object(AbstractObject, ArgProvider):
         else:
             return {self.name: self.value}
 
-    def _arg_values(self, args=None, **kwargs):
-        """
-        Produce runtime values for this Object after evaluating user input.
-
-        Parameters
-        ----------
-        args : dict, optional
-            Known argument values.
-        **kwargs
-            Dictionary of user-provided argument overrides.
-        """
+    def _arg_values(self, **kwargs):
         if self.name in kwargs:
             return {self.name: kwargs.pop(self.name)}
         else:
-            return self._arg_defaults()
+            return {}
 
 
 class CompositeObject(Object):
