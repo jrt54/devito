@@ -2,6 +2,7 @@ import sympy
 
 from cached_property import cached_property
 
+from devito.tools import flatten
 from devito.finite_differences.finite_difference import (left, right, centered,
                                                          generic_derivative, transpose,
                                                          first_derivative, direct,
@@ -19,29 +20,46 @@ class Derivative(sympy.Derivative, Differentiable):
     """
 
     def __new__(cls, expr, *dims, **kwargs):
-        deriv_order = kwargs.get("deriv_order", 1)
-        # expand the dimension depending on the derivative order
-        # ie Derivative(expr, x, 2) becomes Derivative(expr, (x, 2))
-        if not isinstance(deriv_order, tuple):
-            new_dims = tuple([dims[0] for _ in range(deriv_order)])
-        else:
-            new_dims = []
-            for d, o in zip(*dims, deriv_order):
-                for _ in range(o):
-                    new_dims.append(d)
-            new_dims = tuple(new_dims)
+        print(expr, dims, kwargs)
+        # Verifies that there is one order per dimension if
+        # deriv_order is provided
+        deriv_order = kwargs.get('deriv_order', None)
+        ndim = len(as_tuple(dims))
+        norder = len(as_tuple(deriv_order)) if deriv_order is not None else 0
 
-        obj = sympy.Derivative.__new__(cls, expr, *new_dims)
-        obj._dims = tuple(d for d in as_tuple(*dims) if isinstance(d, Dimension))
+        if deriv_order is not None and ndim != norder:
+            raise ValueError("Different number of Dimensions and derivative orders")
+    
+        if deriv_order is not None:
+            orders = dict((d, o) for d, o in zip(dims, as_tuple(deriv_order)))
+        else:
+            orders = dict()
+            for i, d in enumerate(dims):
+                if isinstance(d, (tuple, sympy.Tuple)):
+                    orders[d[0]] = d[1]
+                elif int(d) == d:
+                    orders[dims[i-1]] = d
+                elif d in orders:
+                    orders[d] =+ 1
+                else:
+                    orders[d] = 1
+
+        new_dims = []
+        for k, v in orders.items():
+            new_dims += [k for _ in range(v)]
+        new_dims = tuple(new_dims)
+
+        obj = sympy.Derivative.__new__(cls, expr, *new_dims, evaluate=False)
+        obj._dims = new_dims
         obj._fd_order = kwargs.get('fd_order', 1)
-        obj._deriv_order = kwargs.get('deriv_order', 1)
+        obj._deriv_order = tuple(orders.values())
         obj._stagger = kwargs.get("stagger", obj._stagger_setup)
         obj._side = kwargs.get("side", None)
         obj._transpose = kwargs.get("transpose", direct)
-
+        
         return obj
 
-    @cached_property
+    @property
     def dims(self):
         return self._dims
 
