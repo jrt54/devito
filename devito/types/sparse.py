@@ -102,7 +102,7 @@ class AbstractSparseFunction(DiscreteFunction, Differentiable):
             support = [range(max(0, j - self._radius + 1), min(M, j + self._radius + 1))
                        for j, M in zip(i, self.grid.shape)]
             ret.append(tuple(product(*support)))
-        return ret
+        return tuple(ret)
 
     @property
     def _dist_datamap(self):
@@ -129,7 +129,7 @@ class AbstractSparseFunction(DiscreteFunction, Differentiable):
         mask = np.array(flatten(dmap[i] for i in sorted(dmap)), dtype=int)
         ret = [slice(None) for i in range(self.ndim)]
         ret[self._sparse_position] = mask
-        return ret
+        return tuple(ret)
 
     @property
     def _dist_subfunc_scatter_mask(self):
@@ -152,7 +152,7 @@ class AbstractSparseFunction(DiscreteFunction, Differentiable):
         mask = ret[self._sparse_position]
         ret[self._sparse_position] = [mask.tolist().index(i)
                                       for i in filter_ordered(mask)]
-        return ret
+        return tuple(ret)
 
     @property
     def _dist_count(self):
@@ -199,8 +199,8 @@ class AbstractSparseFunction(DiscreteFunction, Differentiable):
             rshape.append(tuple(handle))
 
         # Per-rank count of send/recv data
-        scount = [prod(i) for i in sshape]
-        rcount = [prod(i) for i in rshape]
+        scount = tuple(prod(i) for i in sshape)
+        rcount = tuple(prod(i) for i in rshape)
 
         # Per-rank displacement of send/recv data (it's actually all contiguous,
         # but the Alltoallv needs this information anyway)
@@ -215,8 +215,8 @@ class AbstractSparseFunction(DiscreteFunction, Differentiable):
 
         # May have to swap axes, as `MPI_Alltoallv` expects contiguous data, and
         # the sparse dimension may not be the outermost
-        sshape = [sshape[i] for i in self._dist_reorder_mask]
-        rshape = [rshape[i] for i in self._dist_reorder_mask]
+        sshape = tuple(sshape[i] for i in self._dist_reorder_mask)
+        rshape = tuple(rshape[i] for i in self._dist_reorder_mask)
 
         return sshape, scount, sdisp, rshape, rcount, rdisp
 
@@ -613,13 +613,13 @@ class SparseFunction(AbstractSparseFunction):
             idx_subs.append(OrderedDict([(v, v.subs(mapper)) for v in variables
                                          if v.function is not self]))
 
-        # Equations for the indirection dimensions
-        eqns = [Eq(v, k) for k, v in points.items()]
-        # Equations (temporaries) for the coefficients
-        eqns.extend([Eq(p, c) for p, c in
-                     zip(self._point_symbols, self._coordinate_bases)])
+        # Temporaries for the indirection dimensions
+        temps = [Eq(v, k, implicit_dims=self.dimensions) for k, v in points.items()]
+        # Temporaries for the coefficients
+        temps.extend([Eq(p, c, implicit_dims=self.dimensions)
+                      for p, c in zip(self._point_symbols, self._coordinate_bases)])
 
-        return idx_subs, eqns
+        return idx_subs, temps
 
     @property
     def gridpoints(self):
@@ -647,22 +647,23 @@ class SparseFunction(AbstractSparseFunction):
         variables = list(retrieve_function_carriers(expr))
 
         # List of indirection indices for all adjacent grid points
-        idx_subs, eqns = self._interpolation_indices(variables, offset)
+        idx_subs, temps = self._interpolation_indices(variables, offset)
 
         # Substitute coordinate base symbols into the interpolation coefficients
-        args = [expr.subs(v_sub) * b.subs(v_sub)
+        args = [expr.xreplace(v_sub) * b.xreplace(v_sub)
                 for b, v_sub in zip(self._interpolation_coeffs, idx_subs)]
 
         # Accumulate point-wise contributions into a temporary
         rhs = Scalar(name='sum', dtype=self.dtype)
-        summands = [Eq(rhs, 0.)] + [Inc(rhs, i) for i in args]
+        summands = [Eq(rhs, 0., implicit_dims=self.dimensions)]
+        summands.extend([Inc(rhs, i, implicit_dims=self.dimensions) for i in args])
 
         # Write/Incr `self`
         lhs = self.subs(self_subs)
 
         last = [Inc(lhs, rhs)] if increment else [Eq(lhs, rhs)]
 
-        return eqns + summands + last
+        return temps + summands + last
 
     def inject(self, field, expr, offset=0):
         """
@@ -681,13 +682,14 @@ class SparseFunction(AbstractSparseFunction):
         variables = list(retrieve_function_carriers(expr)) + [field]
 
         # List of indirection indices for all adjacent grid points
-        idx_subs, eqns = self._interpolation_indices(variables, offset)
+        idx_subs, temps = self._interpolation_indices(variables, offset)
 
         # Substitute coordinate base symbols into the interpolation coefficients
-        eqns.extend([Inc(field.xreplace(vsub), expr.xreplace(vsub) * b)
-                     for b, vsub in zip(self._interpolation_coeffs, idx_subs)])
+        eqns = [Inc(field.xreplace(vsub), expr.xreplace(vsub) * b,
+                    implicit_dims=self.dimensions)
+                for b, vsub in zip(self._interpolation_coeffs, idx_subs)]
 
-        return eqns
+        return temps + eqns
 
     def guard(self, expr=None, offset=0):
         """
@@ -724,10 +726,11 @@ class SparseFunction(AbstractSparseFunction):
                          if f.is_SparseFunction}
             out = indexify(expr).xreplace({f._sparse_dim: cd for f in functions})
 
-        # Equations for the indirection dimensions
-        eqns = [Eq(v, k) for k, v in points.items() if v in conditions]
+        # Temporaries for the indirection dimensions
+        temps = [Eq(v, k, implicit_dims=self.dimensions)
+                 for k, v in points.items() if v in conditions]
 
-        return out, eqns
+        return out, temps
 
     @cached_property
     def _decomposition(self):
