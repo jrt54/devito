@@ -129,7 +129,7 @@ class LoweredEq(sympy.Eq, IREq):
 
         # The data space is relative to the computational domain. Note that we
         # are deliberately dropping the intervals ordering (by turning `intervals`
-        # into a list), as this is irrelevant (even more: dangerous) for data spaces
+        # into a list), as this is irrelevant for data spaces
         intervals = [i if i.dim in oobs else i.zero() for i in intervals]
         intervals += [Interval(i, 0, 0) for i in ordering
                       if i not in ispace.dimensions + conditionals]
