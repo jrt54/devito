@@ -369,13 +369,13 @@ class IterationInstance(LabeledVector):
             pass
 
         # Given `d` \in aindices, iterating over [0, size_d):
-        # * if `self[d] - d < self.function._size_halo[d].left`, then `self` will
+        # * if `self[d] - d < self.function._size_nodomain[d].left`, then `self` will
         #   definitely touch the left-halo when `d=0`
-        # * if `self[d] - d > self.function._size_halo[d].left`, then `self` will
+        # * if `self[d] - d > self.function._size_nodomain[d].left`, then `self` will
         #   definitely touch the right-halo when `d=size_d-1`
-        size_halo_left = self.function._size_halo[findex].left
+        size_nodomain_left = self.function._size_nodomain[findex].left
         try:
-            touch_halo_left = bool(self[findex] - aindex < size_halo_left)
+            touch_halo_left = bool(self[findex] - aindex < size_nodomain_left)
         except TypeError:
             # Conservatively assume True. We might end up here, for example,
             # in the following cases:
@@ -384,7 +384,7 @@ class IterationInstance(LabeledVector):
             # * `self[findex]` isn't affine in the `aindex`
             touch_halo_left = True
         try:
-            touch_halo_right = bool(self[findex] - aindex > size_halo_left)
+            touch_halo_right = bool(self[findex] - aindex > size_nodomain_left)
         except TypeError:
             # Same considerations as in the try-except above
             touch_halo_right = True
