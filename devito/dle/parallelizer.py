@@ -69,7 +69,7 @@ class Ompizer(object):
     than this threshold.
     """
 
-    COLLAPSE = 32
+    COLLAPSE = 4
     """
     Use a collapse clause if the number of available physical cores is greater
     than this threshold.
