@@ -7,7 +7,7 @@ from cached_property import cached_property
 from devito.ir.iet import (Expression, Iteration, List, FindAdjacent,
                            FindNodes, IsPerfectIteration, Transformer,
                            compose_nodes, retrieve_iteration_tree)
-from devito.logger import warning
+from devito.exceptions import InvalidArgument
 from devito.symbolics import as_symbol, xreplace_indices
 from devito.tools import as_tuple, flatten
 from devito.types import IncrDimension, Scalar
@@ -291,26 +291,36 @@ class BlockDimension(IncrDimension):
 
     def _arg_values(self, args, interval, grid, **kwargs):
         if self.step.name in kwargs:
-            value = kwargs.pop(self.step.name)
-            if value <= args[self.parent.max_name] - args[self.parent.min_name] + 1:
-                return {self.step.name: value}
-            elif value < 0:
-                raise ValueError("Illegale block size `%s=%d` (it should be > 0)"
-                                 % (self.step.name, value))
-            else:
-                # Avoid OOB
-                warning("The specified block size `%s=%d` is bigger than the "
-                        "iteration range; shrinking it to `%s=1`."
-                        % (self.step.name, value, self.step.name))
-                return {self.step.name: 1}
+            return {self.step.name: kwargs.pop(self.step.name)}
         elif isinstance(self.parent, BlockDimension):
-            # `self` is a BlockDimension within an outer BlockDimension
-            # No value supplied -> the sub-block spans the entire block
+            # `self` is a BlockDimension within an outer BlockDimension, but
+            # no value supplied -> the sub-block will span the entire block
             return {self.step.name: args[self.parent.step.name]}
         else:
             value = self._arg_defaults()[self.step.name]
-            if value <= args[self.parent.max_name] - args[self.parent.min_name] + 1:
+            if value <= args[self.root.max_name] - args[self.root.min_name] + 1:
                 return {self.step.name: value}
             else:
-                # Avoid OOB
+                # Avoid OOB (will end up here only in case of tiny iteration spaces)
                 return {self.step.name: 1}
+
+    def _arg_check(self, args, interval):
+        """Check the block size won't cause OOB accesses."""
+        value = args[self.step.name]
+        if isinstance(self.parent, BlockDimension):
+            # sub-BlockDimensions must be perfect divisors of their parent
+            parent_value = args[self.parent.step.name]
+            if parent_value % value > 0:
+                raise InvalidArgument("Illegal block size `%s=%d`: sub-block sizes "
+                                      "must divide the parent block size evenly (`%s=%d`)"
+                                      % (self.step.name, value,
+                                         self.parent.step.name, parent_value))
+        else:
+            if value < 0:
+                raise InvalidArgument("Illegal block size `%s=%d`: it should be > 0"
+                                      % (self.step.name, value))
+            if value > args[self.root.max_name] - args[self.root.min_name] + 1:
+                # Avoid OOB
+                raise InvalidArgument("Illegal block size `%s=%d`: it's greater than the "
+                                      "iteration range and it will cause an OOB access"
+                                      % (self.step.name, value))
