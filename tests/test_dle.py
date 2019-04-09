@@ -8,6 +8,7 @@ from conftest import EVAL, skipif
 from devito import Grid, Function, TimeFunction, Eq, Operator, solve
 from devito.dle import NThreads, transform
 from devito.dle.parallelizer import nhyperthreads
+from devito.exceptions import InvalidArgument
 from devito.ir.equations import DummyEq
 from devito.ir.iet import (Call, Expression, Iteration, Conditional, FindNodes,
                            iet_analyze, retrieve_iteration_tree)
@@ -17,8 +18,9 @@ from unittest.mock import patch
 pytestmark = skipif(['yask', 'ops'])
 
 
-def get_blocksizes(op, dle, grid, blockshape):
-    blocksizes = {'%s0_blk_size' % d: v for d, v in zip(grid.dimensions, blockshape)}
+def get_blocksizes(op, dle, grid, blockshape, level=0):
+    blocksizes = {'%s0_blk%d_size' % (d, level): v
+                  for d, v in zip(grid.dimensions, blockshape)}
     blocksizes = {k: v for k, v in blocksizes.items() if k in op._known_arguments}
     # Sanity check
     if grid.dim == 1 or len(blockshape) == 0:
@@ -70,8 +72,10 @@ def _new_operator2(shape, time_order, blockshape=None, dle=None):
     return outfield, op
 
 
-def _new_operator3(shape, blockshape=None, dle=None):
-    blockshape = as_tuple(blockshape)
+def _new_operator3(shape, blockshape0=None, blockshape1=None, dle=None):
+    blockshape0 = as_tuple(blockshape0)
+    blockshape1 = as_tuple(blockshape1)
+
     grid = Grid(shape=shape)
     spacing = 0.1
     a = 0.5
@@ -89,8 +93,9 @@ def _new_operator3(shape, blockshape=None, dle=None):
     stencil = solve(eqn, u.forward)
     op = Operator(Eq(u.forward, stencil), dle=dle)
 
-    blocksizes = get_blocksizes(op, dle, grid, blockshape)
-    op.apply(u=u, t=10, dt=dt, **blocksizes)
+    blocksizes0 = get_blocksizes(op, dle, grid, blockshape0, 0)
+    blocksizes1 = get_blocksizes(op, dle, grid, blockshape1, 1)
+    op.apply(u=u, t=10, dt=dt, **blocksizes0, **blocksizes1)
 
     return u.data[1, :], op
 
@@ -178,7 +183,7 @@ def test_cache_blocking_edge_cases(shape, blockshape):
 
 
 @pytest.mark.parametrize("shape,blockshape", [
-    ((3, 3), (3, 4)),
+    ((3, 3), (3, 3)),
     ((4, 4), (3, 4)),
     ((5, 5), (3, 4)),
     ((6, 6), (3, 4)),
@@ -198,6 +203,32 @@ def test_cache_blocking_edge_cases_highorder(shape, blockshape):
                                                            {'blockinner': True}))
 
     assert np.equal(wo_blocking.data, w_blocking.data).all()
+
+
+@pytest.mark.parametrize("blockshape0,blockshape1,exception", [
+    ((24, 24, 40), (24, 24, 40), False),
+    ((24, 24, 40), (4, 4, 4), False),
+    ((24, 24, 40), (8, 8, 8), False),
+    ((20, 20, 12), (4, 4, 4), False),
+    ((28, 32, 16), (14, 16, 8), False),
+    ((12, 12, 60), (4, 12, 4), False),
+    ((12, 12, 60), (4, 5, 4), True),  # not a perfect divisor
+    ((12, 12, 60), (24, 4, 4), True),  # bigger than outer block
+])
+def test_cache_blocking_hierarchical(blockshape0, blockshape1, exception):
+    shape = (51, 102, 71)
+
+    wo_blocking, a = _new_operator3(shape, dle='noop')
+    try:
+        w_blocking, b = _new_operator3(shape, blockshape0, blockshape1,
+                                       dle=('blocking', {'blockinner': True,
+                                                         'blocklevels': 2}))
+        assert not exception
+        assert np.all(wo_blocking == w_blocking)
+    except InvalidArgument:
+        assert exception
+    except:
+        assert False
 
 
 @pytest.mark.parametrize('exprs,expected', [
@@ -317,6 +348,7 @@ def test_loops_collapsed(eq, expected, blocking):
 class TestNestedParallelism(object):
 
     @patch("devito.dle.parallelizer.Ompizer.NESTED", 0)
+    @patch("devito.dle.parallelizer.Ompizer.COLLAPSE", 10000)
     def test_basic(self):
         grid = Grid(shape=(3, 3, 3))
 
@@ -361,6 +393,7 @@ class TestNestedParallelism(object):
 
     @patch("devito.dse.backends.advanced.AdvancedRewriter.MIN_COST_ALIAS", 1)
     @patch("devito.dle.parallelizer.Ompizer.NESTED", 0)
+    @patch("devito.dle.parallelizer.Ompizer.COLLAPSE", 10000)
     def test_multiple_subnests(self):
         grid = Grid(shape=(3, 3, 3))
         x, y, z = grid.dimensions
