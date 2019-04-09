@@ -274,7 +274,7 @@ class BlockDimension(IncrDimension):
 
     @property
     def _arg_names(self):
-        return (self.step.name,) + self.parent._arg_names
+        return (self.step.name,)
 
     def _arg_defaults(self, **kwargs):
         # TODO: need a heuristic to pick a default block size
@@ -283,7 +283,7 @@ class BlockDimension(IncrDimension):
     def _arg_values(self, args, interval, grid, **kwargs):
         if self.step.name in kwargs:
             value = kwargs.pop(self.step.name)
-            if value <= args[self.root.max_name] - args[self.root.min_name] + 1:
+            if value <= args[self.parent.max_name] - args[self.parent.min_name] + 1:
                 return {self.step.name: value}
             elif value < 0:
                 raise ValueError("Illegale block size `%s=%d` (it should be > 0)"
@@ -294,9 +294,13 @@ class BlockDimension(IncrDimension):
                         "iteration range; shrinking it to `%s=1`."
                         % (self.step.name, value, self.step.name))
                 return {self.step.name: 1}
+        elif isinstance(self.parent, BlockDimension):
+            # `self` is a BlockDimension within an outer BlockDimension
+            # No value supplied -> the sub-block spans the entire block
+            return {self.step.name: args[self.parent.step.name]}
         else:
             value = self._arg_defaults()[self.step.name]
-            if value <= args[self.root.max_name] - args[self.root.min_name] + 1:
+            if value <= args[self.parent.max_name] - args[self.parent.min_name] + 1:
                 return {self.step.name: value}
             else:
                 # Avoid OOB
