@@ -168,6 +168,12 @@ class PlatformRewriter(AbstractRewriter):
     Collection of backend-compiler-specific pragmas.
     """
 
+    _default_blocking_levels = 1
+    """
+    Depth of the loop blocking hierarchy. 1 => "blocks", 2 => "blocks" and "sub-blocks",
+    3 => "blocks", "sub-blocks", and "sub-sub-blocks", ...
+    """
+
     def _pipeline(self, state):
         return
 
@@ -268,8 +274,9 @@ class PlatformRewriter(AbstractRewriter):
         """
         Apply hierarchical loop blocking to PARALLEL Iteration trees.
         """
-        blockinner = bool(self.params.get('blockinner'))
-        blockalways = bool(self.params.get('blockalways'))
+        blockinner = bool(self.params['blockinner'])
+        blockalways = bool(self.params['blockalways'])
+        nlevels = self.params.get('blocklevels') or self._default_blocking_levels
 
         # Make sure loop blocking will span as many Iterations as possible
         iet = fold_blockable_tree(iet, blockinner)
@@ -293,37 +300,43 @@ class PlatformRewriter(AbstractRewriter):
                 continue
 
             # Apply hierarchical loop blocking to `tree`
-            level0 = []  # Outermost blocks ("the biggest blocks")
-            level1 = []  # Lower-level blocks ("sub-blocks")
+            level_0 = []  # Outermost level of blocking
+            level_i = [[] for i in range(1, nlevels)]  # Inner levels of blocking
             intra = []  # Within the smallest block
             for i in iterations:
-                # Build Iteration across level0 blocks
-                d0 = BlockDimension(i.dim, name="%s%d_blk0" % (i.dim.name, len(mapper)))
-                level0.append(Iteration([], d0, d0.symbolic_max, properties=PARALLEL))
+                template = "%s%d_blk%s" % (i.dim.name, len(mapper), '%d')
 
-                # Build Iteration across level1 blocks
-                d1 = BlockDimension(d0, name="%s%d_blk1" % (i.dim.name, len(mapper)))
-                level1.append(Iteration([], d1, limits=(d0, d0+d0.step-1, d1.step),
+                # Build Iteration across `level_0` blocks
+                d = BlockDimension(i.dim, name=template % 0)
+                level_0.append(Iteration([], d, d.symbolic_max, properties=PARALLEL))
+
+                # Build Iteration across all `level_i` blocks, `i` in (1, nlevels]
+                for n, li in enumerate(level_i, 1):
+                    di = BlockDimension(d, name=template % n)
+                    li.append(Iteration([], di, limits=(d, d+d.step-1, di.step),
                                         properties=PARALLEL))
+                    d = di
 
-                # Build Iteration within a level1 block
-                intra.append(i._rebuild([], limits=(d1, d1+d1.step-1, 1), offsets=(0, 0)))
+                # Build Iteration within the smallest block
+                intra.append(i._rebuild([], limits=(d, d+d.step-1, 1), offsets=(0, 0)))
+            level_i = flatten(level_i)
 
-                block_dims.extend([d0, d1])
+            # Track all constructed BlockDimensions
+            block_dims.extend(i.dim for i in level_0 + level_i)
 
             # Construct the blocked tree
-            blocked = compose_nodes(level0 + level1 + intra + [iterations[-1].nodes])
+            blocked = compose_nodes(level_0 + level_i + intra + [iterations[-1].nodes])
             blocked = unfold_blocked_tree(blocked)
 
             # Promote to a separate Callable
-            dynamic_parameters = flatten((l0.dim, l0.step) for l0 in level0)
-            dynamic_parameters.extend([l1.step for l1 in level1])
+            dynamic_parameters = flatten((l0.dim, l0.step) for l0 in level_0)
+            dynamic_parameters.extend([li.step for li in level_i])
             efunc = make_efunc("bf%d" % len(mapper), blocked, dynamic_parameters)
             efuncs.append(efunc)
 
             # Compute the iteration ranges
             ranges = []
-            for i, l0 in zip(iterations, level0):
+            for i, l0 in zip(iterations, level_0):
                 maxb = i.symbolic_max - (i.symbolic_size % l0.step)
                 ranges.append(((i.symbolic_min, maxb, l0.step),
                                (maxb + 1, i.symbolic_max, i.symbolic_max - maxb)))
@@ -332,10 +345,13 @@ class PlatformRewriter(AbstractRewriter):
             body = []
             for p in product(*ranges):
                 dynamic_args_mapper = {}
-                for l0, l1, (m, M, b) in zip(level0, level1, p):
+                for l0, (m, M, b) in zip(level_0, p):
                     dynamic_args_mapper[l0.dim] = (m, M)
                     dynamic_args_mapper[l0.step] = (b,)
-                    dynamic_args_mapper[l1.step] = (l1.step if b is l0.step else b,)
+                    for li in level_i:
+                        if li.dim.root is l0.dim.root:
+                            value = li.step if b is l0.step else b
+                            dynamic_args_mapper[li.step] = (value,)
                 call = efunc.make_call(dynamic_args_mapper)
                 body.append(List(body=call))
 
