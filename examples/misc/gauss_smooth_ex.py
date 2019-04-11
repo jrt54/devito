@@ -24,7 +24,7 @@ x = grid.dimensions
 f = Function(name='f', grid=grid)
 f.data[:] = ascent
 
-f = gaussian_smooth(f, sigma=5)
+gaussian_smooth(f, sigma=5)
 
 """
 Plots:
