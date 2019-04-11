@@ -61,8 +61,13 @@ def gaussian_smooth(f, sigma=1, _order=4):
 
     f_c = dv.Function(name='f_c', grid=f.grid, space_order=2*lw, coefficients='symbolic')
     f_c.data[:] = f.data[:]
+
+    # FIXME: Needs to cop all of f's args
+    f_o = dv.Function(name='f_o', grid=f.grid, space_order=f.space_order)
+
     weights = np.exp(-0.5/sigma**2*(np.linspace(-lw, lw, 2*lw+1))**2)
     weights = weights/weights.sum()
+
     rhs = []
     coeffs = []
     for d in dims:
@@ -71,11 +76,12 @@ def gaussian_smooth(f, sigma=1, _order=4):
     subs = dv.Substitutions(*coeffs)
     exprs = []
     for i in rhs:
-        exprs.append(dv.Eq(f_c, floor(i), coefficients=subs))
+        exprs.append(dv.Eq(f_o, i, coefficients=subs))
+        exprs.append(dv.Eq(f_c, floor(f_o)))
     op = dv.Operator(exprs)
     op.apply()
-    f.data[:] = f_c.data[:]
-    return f
+    f_o.data[:] = f_c.data[:]
+    return f_o
 
 # Reduction-inducing builtins
 
