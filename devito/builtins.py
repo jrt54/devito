@@ -2,12 +2,12 @@
 Built-in Operators provided by Devito.
 """
 
-from sympy import Abs, Pow
+from sympy import Abs, Pow, floor
 import numpy as np
 
 import devito as dv
 
-__all__ = ['assign', 'smooth', 'norm', 'sumall', 'inner', 'mmin', 'mmax']
+__all__ = ['assign', 'smooth', 'gaussian_smooth', 'norm', 'sumall', 'inner', 'mmin', 'mmax']
 
 
 def assign(f, v=0):
@@ -52,6 +52,30 @@ def smooth(f, g, axis=None):
             axis = g.dimensions[-1]
         dv.Operator(dv.Eq(f, g.avg(dims=axis)), name='smoother')()
 
+def gaussian_smooth(f, sigma=1, _order=4):
+    """
+    Gaussian smooth function.
+    """
+    lw = int(_order*sigma + 0.5)
+    dims = f.grid.dimensions
+
+    f_c = dv.Function(name='f_c', grid=f.grid, space_order=2*lw, coefficients='symbolic')
+    f_c.data[:] = f.data[:]
+    weights = np.exp(-0.5/sigma**2*(np.linspace(-lw, lw, 2*lw+1))**2)
+    weights = weights/weights.sum()
+    rhs = []
+    coeffs = []
+    for d in dims:
+        rhs.append(dv.generic_derivative(f_c, d, 2*lw, 1))
+        coeffs.append(dv.Coefficient(1, f_c, d, weights))
+    subs = dv.Substitutions(*coeffs)
+    exprs = []
+    for i in rhs:
+        exprs.append(dv.Eq(f_c, floor(i), coefficients=subs))
+    op = dv.Operator(exprs)
+    op.apply()
+    f.data[:] = f_c.data[:]
+    return f
 
 # Reduction-inducing builtins
 
