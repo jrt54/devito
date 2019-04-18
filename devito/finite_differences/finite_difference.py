@@ -113,18 +113,18 @@ def first_derivative(expr, dim, fd_order=None, side=centered, matvec=direct,
     >>> f = Function(name='f', grid=grid)
     >>> g = Function(name='g', grid=grid)
     >>> first_derivative(f*g, dim=x)
-    -f(x, y)*g(x, y)/h_x + f(x + h_x, y)*g(x + h_x, y)/h_x
+    (-f(x, y)*g(x, y) + f(x + h_x, y)*g(x + h_x, y))/h_x
 
     This is also more easily obtainable via:
 
     >>> (f*g).dx
-    -f(x, y)*g(x, y)/h_x + f(x + h_x, y)*g(x + h_x, y)/h_x
+    (-f(x, y)*g(x, y) + f(x + h_x, y)*g(x + h_x, y))/h_x
 
     The adjoint mode
 
     >>> g = Function(name='g', grid=grid)
     >>> first_derivative(f*g, dim=x, matvec=transpose)
-    f(x, y)*g(x, y)/h_x - f(x + h_x, y)*g(x + h_x, y)/h_x
+    (f(x, y)*g(x, y) - f(x + h_x, y)*g(x + h_x, y))/h_x
     """
     diff = dim.spacing
     side = side.adjoint(matvec)
@@ -186,14 +186,14 @@ def second_derivative(expr, dim, fd_order, stagger=None, **kwargs):
     >>> f = Function(name='f', grid=grid, space_order=2)
     >>> g = Function(name='g', grid=grid, space_order=2)
     >>> second_derivative(f*g, dim=x, fd_order=2)
-    -2.0*f(x, y)*g(x, y)/h_x**2 + f(x - h_x, y)*g(x - h_x, y)/h_x**2 +\
- f(x + h_x, y)*g(x + h_x, y)/h_x**2
+    (-2.0*f(x, y)*g(x, y) + f(x - h_x, y)*g(x - h_x, y) +\
+ f(x + h_x, y)*g(x + h_x, y))/h_x**2
 
     This is also more easily obtainable via:
 
     >>> (f*g).dx2
-    -2.0*f(x, y)*g(x, y)/h_x**2 + f(x - h_x, y)*g(x - h_x, y)/h_x**2 +\
- f(x + h_x, y)*g(x + h_x, y)/h_x**2
+    (-2.0*f(x, y)*g(x, y) + f(x - h_x, y)*g(x - h_x, y) +\
+ f(x + h_x, y)*g(x + h_x, y))/h_x**2
     """
 
     return generic_derivative(expr, dim, fd_order, 2, stagger=None, **kwargs)
@@ -232,18 +232,18 @@ def cross_derivative(expr, dims, fd_order, deriv_order, stagger=None, **kwargs):
     >>> f = Function(name='f', grid=grid, space_order=2)
     >>> g = Function(name='g', grid=grid, space_order=2)
     >>> cross_derivative(f*g, dims=(x, y), fd_order=(2, 2), deriv_order=(1, 1))
-    -0.5*(-0.5*f(x - h_x, y - h_y)*g(x - h_x, y - h_y)/h_x +\
- 0.5*f(x + h_x, y - h_y)*g(x + h_x, y - h_y)/h_x)/h_y +\
- 0.5*(-0.5*f(x - h_x, y + h_y)*g(x - h_x, y + h_y)/h_x +\
- 0.5*f(x + h_x, y + h_y)*g(x + h_x, y + h_y)/h_x)/h_y
+    (-0.5*(-0.5*f(x - h_x, y - h_y)*g(x - h_x, y - h_y) +\
+ 0.5*f(x + h_x, y - h_y)*g(x + h_x, y - h_y))/h_x +\
+ 0.5*(-0.5*f(x - h_x, y + h_y)*g(x - h_x, y + h_y) +\
+ 0.5*f(x + h_x, y + h_y)*g(x + h_x, y + h_y))/h_x)/h_y
 
     This is also more easily obtainable via:
 
     >>> (f*g).dxdy
-    -0.5*(-0.5*f(x - h_x, y - h_y)*g(x - h_x, y - h_y)/h_x +\
- 0.5*f(x + h_x, y - h_y)*g(x + h_x, y - h_y)/h_x)/h_y +\
- 0.5*(-0.5*f(x - h_x, y + h_y)*g(x - h_x, y + h_y)/h_x +\
- 0.5*f(x + h_x, y + h_y)*g(x + h_x, y + h_y)/h_x)/h_y
+    (-0.5*(-0.5*f(x - h_x, y - h_y)*g(x - h_x, y - h_y) +\
+ 0.5*f(x + h_x, y - h_y)*g(x + h_x, y - h_y))/h_x +\
+ 0.5*(-0.5*f(x - h_x, y + h_y)*g(x - h_x, y + h_y) +\
+ 0.5*f(x + h_x, y + h_y)*g(x + h_x, y + h_y))/h_x)/h_y
     """
     stagger = stagger or [None]*len(dims)
     for d, fd, dim, s in zip(deriv_order, fd_order, dims, stagger):

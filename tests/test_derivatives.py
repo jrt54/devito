@@ -71,7 +71,7 @@ class TestFD(object):
         """Test the stencil expressions provided by devito objects"""
         u = SymbolType(name='u', grid=self.grid, time_order=2, space_order=2)
         expr = getattr(u, derivative)
-        assert(len(expr.args) == dim)
+        assert(len(expr.expand().args) == dim)
 
     @pytest.mark.parametrize('derivative, dim', [
         ('dx', x), ('dy', y), ('dz', z)
@@ -91,7 +91,6 @@ class TestFD(object):
 
         s_expr = u.diff(dim).as_finite_difference(indices).evalf(_PRECISION)
         assert(simplify(expr - s_expr) == 0)  # Symbolic equality
-        assert(expr == s_expr)  # Exact equailty
 
     @pytest.mark.parametrize('derivative, dim', [
         ('dx2', x), ('dy2', y), ('dz2', z)
@@ -107,7 +106,6 @@ class TestFD(object):
         indices = [(dim + i * dim.spacing) for i in range(-width, width + 1)]
         s_expr = u.diff(dim, dim).as_finite_difference(indices).evalf(_PRECISION)
         assert(simplify(expr - s_expr) == 0)  # Symbolic equality
-        assert(expr == s_expr)  # Exact equailty
 
     @pytest.mark.parametrize('space_order', [2, 4, 6, 8, 10, 12, 14, 16, 18, 20])
     # Only test x and t as y and z are the same as x
@@ -239,22 +237,6 @@ class TestFD(object):
 
         assert np.allclose(u.data[-1], nt-1)
         assert np.allclose(u2.data[1], 0.5)
-
-    @pytest.mark.parametrize('expr,expected', [
-        ('f.dx', '-f(x)/h_x + f(x + h_x)/h_x'),
-        ('f.dx + g.dx', '-f(x)/h_x + f(x + h_x)/h_x - g(x)/h_x + g(x + h_x)/h_x'),
-        ('-f', '-f(x)'),
-        ('-(f + g)', '-f(x) - g(x)')
-    ])
-    def test_shortcuts(self, expr, expected):
-        grid = Grid(shape=(10,))
-        f = Function(name='f', grid=grid)  # noqa
-        g = Function(name='g', grid=grid)  # noqa
-
-        expr = eval(expr)
-
-        assert isinstance(expr, Differentiable)
-        assert expected == str(expr)
 
     @pytest.mark.parametrize('so', [2, 5, 8])
     def test_all_shortcuts(self, so):

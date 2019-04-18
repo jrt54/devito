@@ -49,7 +49,7 @@ class Eq(sympy.Eq):
 
     >>> from sympy import sin
     >>> Eq(f, sin(f.dx)**2)
-    Eq(f(x, y), sin(f(x, y)/h_x - f(x + h_x, y)/h_x)**2)
+    Eq(f(x, y), sin((-f(x, y) + f(x + h_x, y))/h_x)**2)
 
     Notes
     -----
