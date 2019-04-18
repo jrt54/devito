@@ -5,7 +5,6 @@ from sympy import Derivative, simplify, diff
 from conftest import skipif
 from devito import (Grid, Function, TimeFunction, Eq, Operator, clear_cache, NODE,
                     ConditionalDimension, left, right, centered, generic_derivative)
-from devito.finite_differences import Differentiable
 
 _PRECISION = 9
 
