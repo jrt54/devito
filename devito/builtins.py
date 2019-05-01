@@ -52,36 +52,107 @@ def smooth(f, g, axis=None):
             axis = g.dimensions[-1]
         dv.Operator(dv.Eq(f, g.avg(dims=axis)), name='smoother')()
 
-def gaussian_smooth(f, sigma=1, _order=4):
+def gaussian_smooth(f, sigma=1, _order=4, mode='reflect'):
     """
     Gaussian smooth function.
     """
+
+    class DataDomain(dv.SubDomain):
+
+        name = 'datadomain'
+
+        def __init__(self, lw):
+            super(DataDomain, self).__init__()
+            self.lw = lw
+
+        def define(self, dimensions):
+            return {d: ('middle', self.lw, self.lw) for d in dimensions}
+
+    def fill_data(g, f, dim, lw, mode):
+
+        sl = slice(lw,-lw,1)
+        indices = ()
+        for _ in range(len(f.grid.dimensions)):
+            indices += (sl, )
+        g.data[indices] = f.data
+        if mode == 'constant':
+            indfl = ()
+            indgl = ()
+            indfr = ()
+            indgr = ()
+            for d in f.grid.dimensions:
+                if d == dim:
+                    indfl += (0, )
+                    indgl += (slice(0,lw,1), )
+                    indfr += (-1, )
+                    indgr += (slice(-lw,-1,1), )
+                else:
+                    indfl += (slice(0,-1,1), )
+                    indgl += (slice(lw,-lw,1), )
+                    indfr += (slice(0,-1,1), )
+                    indgr += (slice(lw,-lw,1), )
+            g.data[indgl] = f.data[indfl]
+            g.data[indgr] = f.data[indfr]
+        elif mode == 'reflect':
+            indfl = ()
+            indgl = ()
+            indfr = ()
+            indgr = ()
+            for d in f.grid.dimensions:
+                if d == dim:
+                    indfl += (slice(lw,0,-1), )
+                    indgl += (slice(0,lw,1), )
+                    indfr += (slice(-1,-lw,-1), )
+                    indgr += (slice(-lw,-1,1), )
+                else:
+                    indfl += (slice(0,-1,1), )
+                    indgl += (slice(lw,-lw,1), )
+                    indfr += (slice(0,-1,1), )
+                    indgr += (slice(lw,-lw,1), )
+            from IPython import embed; embed()
+            g.data[indgl] = f.data[indfl]
+            g.data[indgr] = f.data[indfr]
+        else:
+            raise ValueError("Mode not available")
+
+        return
+    
+    def subfloor(f, g):
+        sl = slice(lw,-lw,1)
+        indices = ()
+        for _ in range(len(f.grid.dimensions)):
+            indices += (sl, )
+        f.data[:] = np.floor(g.data[indices])
+
     lw = int(_order*sigma + 0.5)
     dims = f.grid.dimensions
 
-    f_c = dv.Function(name='f_c', grid=f.grid, space_order=2*lw, coefficients='symbolic')
-    f_c.data[:] = f.data[:]
+    # Create the padded grid:
+    datadomain = DataDomain(lw)
+    shape_padded = np.array(f.grid.shape) + 2*lw
+    grid = dv.Grid(shape=shape_padded, subdomains=datadomain)
 
-    # FIXME: Needs to cop all of f's args
-    f_o = dv.Function(name='f_o', grid=f.grid, space_order=f.space_order)
+    f_c = dv.Function(name='f_c', grid=grid, coefficients='symbolic')
+    f_o = dv.Function(name='f_o', grid=grid, coefficients='symbolic')
 
     weights = np.exp(-0.5/sigma**2*(np.linspace(-lw, lw, 2*lw+1))**2)
     weights = weights/weights.sum()
 
-    rhs = []
-    coeffs = []
     for d in dims:
-        rhs.append(dv.generic_derivative(f_c, d, 2*lw, 1))
-        coeffs.append(dv.Coefficient(1, f_c, d, weights))
-    subs = dv.Substitutions(*coeffs)
-    exprs = []
-    for i in rhs:
-        exprs.append(dv.Eq(f_o, i, coefficients=subs))
-        exprs.append(dv.Eq(f_c, floor(f_o)))
-    op = dv.Operator(exprs)
-    op.apply()
-    f_o.data[:] = f_c.data[:]
-    return f_o
+
+        fill_data(f_c, f, d, lw, mode)
+        
+        rhs = dv.generic_derivative(f_c, d, 2*lw, 1)
+        coeffs = dv.Coefficient(1, f_c, d, weights)
+        
+        expr = dv.Eq(f_o, rhs, coefficients=dv.Substitutions(coeffs),
+                     subdomain=grid.subdomains['datadomain'])
+        op = dv.Operator(expr)
+        op.apply()
+        subfloor(f, f_o)
+
+    from IPython import embed; embed()
+    return f
 
 # Reduction-inducing builtins
 
