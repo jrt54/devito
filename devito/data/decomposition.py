@@ -232,7 +232,11 @@ class Decomposition(tuple):
                         return slice(-1, -3)
                     glb_idx_min = self.glb_min if glb_idx.start is None else glb_idx.start
                     glb_idx_max = self.glb_max if glb_idx.stop is None else glb_idx.stop-1
-                    retfunc = lambda a, b: slice(a, b + 1, glb_idx.step)
+                    if bool(glb_idx.step) and glb_idx.step < 0:
+                        # FIXME: Will break with MPI
+                        retfunc = lambda a, b: slice(a, glb_idx.stop, glb_idx.step)
+                    else:
+                        retfunc = lambda a, b: slice(a, b + 1, glb_idx.step)
                 else:
                     raise TypeError("Cannot convert index from `%s`" % type(glb_idx))
                 # -> Handle negative min/max
