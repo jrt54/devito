@@ -230,13 +230,17 @@ class Decomposition(tuple):
                 elif isinstance(glb_idx, slice):
                     if self.loc_empty:
                         return slice(-1, -3)
-                    glb_idx_min = self.glb_min if glb_idx.start is None else glb_idx.start
-                    glb_idx_max = self.glb_max if glb_idx.stop is None else glb_idx.stop-1
-                    if bool(glb_idx.step) and glb_idx.step < 0:
-                        # FIXME: Will break with MPI
-                        retfunc = lambda a, b: slice(a, glb_idx.stop, glb_idx.step)
-                    else:
+                    if glb_idx.step >= 0:
+                        glb_idx_min = self.glb_min if glb_idx.start is None \
+                            else glb_idx.start
+                        glb_idx_max = self.glb_max if glb_idx.stop is None \
+                            else glb_idx.stop-1
                         retfunc = lambda a, b: slice(a, b + 1, glb_idx.step)
+                    else:
+                        glb_idx_max = self.glb_max if glb_idx.start is None \
+                            else glb_idx.start
+                        glb_idx_min = glb_idx.stop
+                        retfunc = lambda a, b: slice(b, a, glb_idx.step)
                 else:
                     raise TypeError("Cannot convert index from `%s`" % type(glb_idx))
                 # -> Handle negative min/max
@@ -245,6 +249,25 @@ class Decomposition(tuple):
                 if glb_idx_max is not None and glb_idx_max < 0:
                     glb_idx_max = self.glb_max + glb_idx_max + 1
                 # -> Do the actual conversion
+                # First check for the special case of a slice with negative step
+                if isinstance(glb_idx, slice):
+                    if glb_idx.step < 0:
+                        if glb_idx_max is None or glb_idx_max > self.loc_abs_max:
+                            loc_max = self.loc_abs_max - base
+                        elif glb_idx_max < self.loc_abs_min:
+                            return retfunc(-1, -3)
+                        else:
+                            loc_max = glb_idx_max - base
+                        if glb_idx_min is not None:
+                            if glb_idx_min < self.loc_abs_min:
+                                loc_min = self.loc_abs_min - base - 1
+                            elif glb_idx_min > self.loc_abs_max:
+                                return retfunc(-1, -3)
+                            else:
+                                loc_min = glb_idx_min - base
+                        else:
+                            loc_min = glb_idx_min
+                        return retfunc(loc_min, loc_max)
                 if glb_idx_min is None or glb_idx_min < self.loc_abs_min:
                     loc_min = self.loc_abs_min - base
                 elif glb_idx_min > self.loc_abs_max:
