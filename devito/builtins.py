@@ -100,16 +100,15 @@ def gaussian_smooth(f, sigma=1, _order=4, mode='reflect'):
             indgr = ()
             for d in f.grid.dimensions:
                 if d == dim:
-                    indfl += (slice(lw,0,-1), )
+                    indfl += (slice(lw-1,None,-1), )
                     indgl += (slice(0,lw,1), )
-                    indfr += (slice(-1,-lw,-1), )
-                    indgr += (slice(-lw,-1,1), )
+                    indfr += (slice(-1,-(lw+1),-1), )
+                    indgr += (slice(-lw,None,1), )
                 else:
-                    indfl += (slice(0,-1,1), )
+                    indfl += (slice(0,None,1), )
                     indgl += (slice(lw,-lw,1), )
-                    indfr += (slice(0,-1,1), )
+                    indfr += (slice(0,None,1), )
                     indgr += (slice(lw,-lw,1), )
-            from IPython import embed; embed()
             g.data[indgl] = f.data[indfl]
             g.data[indgr] = f.data[indfr]
         else:
@@ -132,8 +131,10 @@ def gaussian_smooth(f, sigma=1, _order=4, mode='reflect'):
     shape_padded = np.array(f.grid.shape) + 2*lw
     grid = dv.Grid(shape=shape_padded, subdomains=datadomain)
 
-    f_c = dv.Function(name='f_c', grid=grid, coefficients='symbolic')
-    f_o = dv.Function(name='f_o', grid=grid, coefficients='symbolic')
+    f_c = dv.Function(name='f_c', grid=grid, space_order=2*lw,
+                      coefficients='symbolic')
+    f_o = dv.Function(name='f_o', grid=grid, space_order=2*lw,
+                      coefficients='symbolic')
 
     weights = np.exp(-0.5/sigma**2*(np.linspace(-lw, lw, 2*lw+1))**2)
     weights = weights/weights.sum()
@@ -141,17 +142,16 @@ def gaussian_smooth(f, sigma=1, _order=4, mode='reflect'):
     for d in dims:
 
         fill_data(f_c, f, d, lw, mode)
-        
+
         rhs = dv.generic_derivative(f_c, d, 2*lw, 1)
         coeffs = dv.Coefficient(1, f_c, d, weights)
-        
+
         expr = dv.Eq(f_o, rhs, coefficients=dv.Substitutions(coeffs),
                      subdomain=grid.subdomains['datadomain'])
         op = dv.Operator(expr)
         op.apply()
         subfloor(f, f_o)
 
-    from IPython import embed; embed()
     return f
 
 # Reduction-inducing builtins
