@@ -74,24 +74,24 @@ def gaussian_smooth(f, sigma=1, _order=4, mode='reflect'):
 
         sl = slice(lw, -lw, 1)
         indices = ()
-        for _ in range(len(f.grid.dimensions)):
+        for _ in g.grid.dimensions:
             indices += (sl, )
-        g.data[indices] = f.data
+        g.data[indices] = f.data[:]
         if mode == 'constant':
             indfl = ()
             indgl = ()
             indfr = ()
             indgr = ()
-            for d in f.grid.dimensions:
+            for d in g.grid.dimensions:
                 if d == dim:
                     indfl += (0, )
                     indgl += (slice(0, lw, 1), )
                     indfr += (-1, )
-                    indgr += (slice(-lw, -1, 1), )
+                    indgr += (slice(-lw, None, 1), )
                 else:
-                    indfl += (slice(0, -1, 1), )
+                    indfl += (slice(0, None, 1), )
                     indgl += (slice(lw, -lw, 1), )
-                    indfr += (slice(0, -1, 1), )
+                    indfr += (slice(0, None, 1), )
                     indgr += (slice(lw, -lw, 1), )
             g.data[indgl] = f.data[indfl]
             g.data[indgr] = f.data[indfr]
@@ -100,11 +100,11 @@ def gaussian_smooth(f, sigma=1, _order=4, mode='reflect'):
             indgl = ()
             indfr = ()
             indgr = ()
-            for d in f.grid.dimensions:
+            for d in g.grid.dimensions:
                 if d == dim:
                     indfl += (slice(lw-1, None, -1), )
                     indgl += (slice(0, lw, 1), )
-                    indfr += (slice(-1, -(lw+1), -1), )
+                    indfr += (slice(None, -lw-1, -1), )
                     indgr += (slice(-lw, None, 1), )
                 else:
                     indfl += (slice(0, None, 1), )
@@ -121,22 +121,21 @@ def gaussian_smooth(f, sigma=1, _order=4, mode='reflect'):
     def subfloor(f, g):
         sl = slice(lw, -lw, 1)
         indices = ()
-        for _ in range(len(f.grid.dimensions)):
+        for _ in range(len(g.grid.dimensions)):
             indices += (sl, )
         f.data[:] = np.floor(g.data[indices])
 
     lw = int(_order*sigma + 0.5)
-    dims = f.grid.dimensions
 
     # Create the padded grid:
     datadomain = DataDomain(lw)
     shape_padded = np.array(f.grid.shape) + 2*lw
     grid = dv.Grid(shape=shape_padded, subdomains=datadomain)
+    dims = grid.dimensions
 
     f_c = dv.Function(name='f_c', grid=grid, space_order=2*lw,
-                      coefficients='symbolic')
-    f_o = dv.Function(name='f_o', grid=grid, space_order=2*lw,
-                      coefficients='symbolic')
+                      coefficients='symbolic', dtype=np.int32)
+    f_o = dv.Function(name='f_o', grid=grid, coefficients='symbolic', dtype=np.int32)
 
     weights = np.exp(-0.5/sigma**2*(np.linspace(-lw, lw, 2*lw+1))**2)
     weights = weights/weights.sum()

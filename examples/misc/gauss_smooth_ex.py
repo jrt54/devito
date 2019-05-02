@@ -1,13 +1,11 @@
 import numpy as np
-import sympy
 
 from devito import Grid, Function
 from devito.builtins import gaussian_smooth
 
-from scipy.ndimage import gaussian_filter, correlate1d
+from scipy.ndimage import gaussian_filter
 from scipy import misc
 import matplotlib.pyplot as plt
-from matplotlib import cm
 
 """
 Python ndimage:
@@ -20,7 +18,7 @@ result = gaussian_filter(ascent, sigma=5)
 Using Devito:
 """
 
-grid = Grid(shape = ascent.shape, extent = ascent.shape)
+grid = Grid(shape=ascent.shape, extent=ascent.shape)
 x = grid.dimensions
 f = Function(name='f', grid=grid, dtype=np.int32)
 f.data[:] = ascent
@@ -44,7 +42,3 @@ ax2.imshow(diff)
 ax3.imshow(result)
 ax4.imshow(f.data[:])
 plt.show()
-
-#########################################################
-from IPython import embed; embed()
-#########################################################
