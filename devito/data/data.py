@@ -210,9 +210,21 @@ class Data(np.ndarray):
             if any(i is Ellipsis for i in idx):
                 # Explicitly replace the Ellipsis
                 items = (slice(None),)*(self.ndim - len(idx) + 1)
-                return idx[:idx.index(Ellipsis)] + items + idx[idx.index(Ellipsis)+1:]
+                items = idx[:idx.index(Ellipsis)] + items + idx[idx.index(Ellipsis)+1:]
             else:
-                return idx + (slice(None),)*(self.ndim - len(idx))
+                items = idx + (slice(None),)*(self.ndim - len(idx))
+            # Normalize slice steps:
+            processed = []
+            for i in items:
+                if isinstance(i, slice):
+                    if i.step is None:
+                        j = slice(i.start, i.stop, 1)
+                        processed.append(j)
+                    else:
+                        processed.append(i)
+                else:
+                    processed.append(i)
+            return as_tuple(processed)
 
     def _convert_index(self, glb_idx):
         glb_idx = self._normalize_index(glb_idx)
