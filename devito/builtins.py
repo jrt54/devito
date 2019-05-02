@@ -2,12 +2,13 @@
 Built-in Operators provided by Devito.
 """
 
-from sympy import Abs, Pow, floor
+from sympy import Abs, Pow
 import numpy as np
 
 import devito as dv
 
-__all__ = ['assign', 'smooth', 'gaussian_smooth', 'norm', 'sumall', 'inner', 'mmin', 'mmax']
+__all__ = ['assign', 'smooth', 'gaussian_smooth', 'norm', 'sumall', 'inner',
+           'mmin', 'mmax']
 
 
 def assign(f, v=0):
@@ -52,6 +53,7 @@ def smooth(f, g, axis=None):
             axis = g.dimensions[-1]
         dv.Operator(dv.Eq(f, g.avg(dims=axis)), name='smoother')()
 
+
 def gaussian_smooth(f, sigma=1, _order=4, mode='reflect'):
     """
     Gaussian smooth function.
@@ -70,7 +72,7 @@ def gaussian_smooth(f, sigma=1, _order=4, mode='reflect'):
 
     def fill_data(g, f, dim, lw, mode):
 
-        sl = slice(lw,-lw,1)
+        sl = slice(lw, -lw, 1)
         indices = ()
         for _ in range(len(f.grid.dimensions)):
             indices += (sl, )
@@ -83,14 +85,14 @@ def gaussian_smooth(f, sigma=1, _order=4, mode='reflect'):
             for d in f.grid.dimensions:
                 if d == dim:
                     indfl += (0, )
-                    indgl += (slice(0,lw,1), )
+                    indgl += (slice(0, lw, 1), )
                     indfr += (-1, )
-                    indgr += (slice(-lw,-1,1), )
+                    indgr += (slice(-lw, -1, 1), )
                 else:
-                    indfl += (slice(0,-1,1), )
-                    indgl += (slice(lw,-lw,1), )
-                    indfr += (slice(0,-1,1), )
-                    indgr += (slice(lw,-lw,1), )
+                    indfl += (slice(0, -1, 1), )
+                    indgl += (slice(lw, -lw, 1), )
+                    indfr += (slice(0, -1, 1), )
+                    indgr += (slice(lw, -lw, 1), )
             g.data[indgl] = f.data[indfl]
             g.data[indgr] = f.data[indfr]
         elif mode == 'reflect':
@@ -100,24 +102,24 @@ def gaussian_smooth(f, sigma=1, _order=4, mode='reflect'):
             indgr = ()
             for d in f.grid.dimensions:
                 if d == dim:
-                    indfl += (slice(lw-1,None,-1), )
-                    indgl += (slice(0,lw,1), )
-                    indfr += (slice(-1,-(lw+1),-1), )
-                    indgr += (slice(-lw,None,1), )
+                    indfl += (slice(lw-1, None, -1), )
+                    indgl += (slice(0, lw, 1), )
+                    indfr += (slice(-1, -(lw+1), -1), )
+                    indgr += (slice(-lw, None, 1), )
                 else:
-                    indfl += (slice(0,None,1), )
-                    indgl += (slice(lw,-lw,1), )
-                    indfr += (slice(0,None,1), )
-                    indgr += (slice(lw,-lw,1), )
+                    indfl += (slice(0, None, 1), )
+                    indgl += (slice(lw, -lw, 1), )
+                    indfr += (slice(0, None, 1), )
+                    indgr += (slice(lw, -lw, 1), )
             g.data[indgl] = f.data[indfl]
             g.data[indgr] = f.data[indfr]
         else:
             raise ValueError("Mode not available")
 
         return
-    
+
     def subfloor(f, g):
-        sl = slice(lw,-lw,1)
+        sl = slice(lw, -lw, 1)
         indices = ()
         for _ in range(len(f.grid.dimensions)):
             indices += (sl, )
@@ -153,6 +155,7 @@ def gaussian_smooth(f, sigma=1, _order=4, mode='reflect'):
         subfloor(f, f_o)
 
     return f
+
 
 # Reduction-inducing builtins
 
