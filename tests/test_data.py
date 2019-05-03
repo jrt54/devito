@@ -64,7 +64,7 @@ class TestDataBasic(object):
         assert np.all(u.data[1, :, :, -1] == 0.)
         # Test slicing with negative steps
         dat = np.array([1, 2, 3, 4])
-        u.data[0, :, 0, 0] = dat[:]
+        u.data[0, :, 0, 0] = dat.reshape(u.data[0, :, 0, 0].shape)
         assert (np.array(u.data[0, 2::-1, 0, 0]) == dat[2::-1]).all()
         assert (np.array(u.data[0, 3:1:-1, 0, 0]) == dat[3:1:-1]).all()
 
