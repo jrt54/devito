@@ -214,16 +214,9 @@ class Data(np.ndarray):
             else:
                 items = idx + (slice(None),)*(self.ndim - len(idx))
             # Normalize slice steps:
-            processed = []
-            for i in items:
-                if isinstance(i, slice):
-                    if i.step is None:
-                        j = slice(i.start, i.stop, 1)
-                        processed.append(j)
-                    else:
-                        processed.append(i)
-                else:
-                    processed.append(i)
+            processed = [slice(i.start, i.stop, 1) if
+                         (isinstance(i, slice) and i.step is None)
+                         else i for i in items]
             return as_tuple(processed)
 
     def _convert_index(self, glb_idx):
