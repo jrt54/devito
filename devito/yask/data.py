@@ -98,7 +98,7 @@ class Data(object):
             else:
                 # Emulate NumPy broadcasting
                 broadcasted = np.empty(shape=shape, dtype=val.dtype)
-                broadcasted[:] = val.reshape(broadcasted.shape)
+                broadcasted[:] = val
                 self.grid.set_elements_in_slice(broadcasted, start, stop)
         elif all(i == j-1 for i, j in zip(shape, self.shape)):
             log("Data: Setting full-array to given scalar via single grid sweep")
