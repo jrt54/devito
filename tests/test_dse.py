@@ -260,6 +260,7 @@ def test_time_dependent_split(dse, dle):
     assert np.allclose(v.data[1, 1:-1, 1:-1], 1.0)
 
 
+@switchconfig(autopadding=False)
 @patch("devito.dse.rewriters.AdvancedRewriter.MIN_COST_ALIAS", 1)
 def test_full_alias_shape_after_blocking():
     """
@@ -291,7 +292,7 @@ def test_full_alias_shape_after_blocking():
     assert len(arrays) == 1
     a = arrays[0]
     assert len(a.dimensions) == 3
-    assert a.halo == [(1, 1), (1, 1), (1, 1)]
+    assert a.halo == ((1, 1), (1, 1), (1, 1))
     assert Add(*a.symbolic_shape[0].args) == x0_blk_size + 2
     assert Add(*a.symbolic_shape[1].args) == y0_blk_size + 2
     assert Add(*a.symbolic_shape[2].args) == z_size + 2
@@ -303,6 +304,7 @@ def test_full_alias_shape_after_blocking():
     assert np.all(u.data == exp)
 
 
+@switchconfig(autopadding=False)
 @patch("devito.dse.rewriters.AdvancedRewriter.MIN_COST_ALIAS", 1)
 def test_contracted_alias_shape_after_blocking():
     """
@@ -331,7 +333,7 @@ def test_contracted_alias_shape_after_blocking():
     assert len(arrays) == 1
     a = arrays[0]
     assert len(a.dimensions) == 2
-    assert a.halo == [(1, 1), (1, 1)]
+    assert a.halo == ((1, 1), (1, 1))
     assert Add(*a.symbolic_shape[0].args) == y0_blk_size + 2
     assert Add(*a.symbolic_shape[1].args) == z_size + 2
     # Check numerical output
