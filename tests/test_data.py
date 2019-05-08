@@ -63,13 +63,17 @@ class TestDataBasic(object):
         assert np.all(u.data[1, :, -1] == 0.)
         assert np.all(u.data[1, :, :, 0] == 0.)
         assert np.all(u.data[1, :, :, -1] == 0.)
-        # Test slicing with negative steps
-        env = os.environ['DEVITO_BACKEND']
-        if not env == 'yask':
-            dat = np.array([1, 2, 3, 4])
-            u.data[0, :, 0, 0] = dat
-            assert (np.array(u.data[0, 2::-1, 0, 0]) == dat[2::-1]).all()
-            assert (np.array(u.data[0, 3:1:-1, 0, 0]) == dat[3:1:-1]).all()
+
+    @skipif('yask')
+    def test_negative_step(self):
+        """Test slicing with a negative step."""
+        grid = Grid(shape=(6, 6, 6))
+        u = TimeFunction(name='u', grid=grid, space_order=1, time_order=1)
+        u.data[:] = 0.
+        dat = np.array([1, 2, 3, 4, 5, 6])
+        u.data[0, :, 0, 0] = dat
+        assert (np.array(u.data[0, 3::-1, 0, 0]) == dat[3::-1]).all()
+        assert (np.array(u.data[0, 5:1:-1, 0, 0]) == dat[5:1:-1]).all()
 
     def test_halo_indexing(self):
         """Test data packing/unpacking in presence of a halo region."""
