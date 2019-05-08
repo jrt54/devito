@@ -1,6 +1,5 @@
 import pytest
 import numpy as np
-import os
 
 from conftest import skipif
 from devito import (Grid, Function, TimeFunction, SparseTimeFunction, Dimension, # noqa
