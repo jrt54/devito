@@ -343,12 +343,12 @@ class AdvancedRewriter(BasicRewriter):
 
             # Create a temporary to store `alias`
             halo = [(abs(i.lower), abs(i.upper)) for i in writeto]
-            function = Array(name=template(), dimensions=writeto.dimensions, halo=halo,
-                             dtype=cluster.dtype)
+            array = Array(name=template(), dimensions=writeto.dimensions, halo=halo,
+                          dtype=cluster.dtype)
 
             # Build up the expression evaluating `alias`
             access = tuple(i.dim - i.lower for i in writeto)
-            expression = Eq(function[access], origin)
+            expression = Eq(array[access], origin)
 
             # Create the substitution rules so that we can use the newly created
             # temporary in place of the aliasing expressions
@@ -357,8 +357,8 @@ class AdvancedRewriter(BasicRewriter):
                 access = [i.dim - i.lower + distance[i.dim] for i in writeto]
                 if aliased in candidates:
                     # It would *not* be in `candidates` if part of a composite alias
-                    subs[candidates[aliased]] = function[access]
-                subs[aliased] = function[access]
+                    subs[candidates[aliased]] = array[access]
+                subs[aliased] = array[access]
 
             # Construct the `alias` data space
             mapper = detect_accesses(expression)
