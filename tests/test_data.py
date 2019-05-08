@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+import os
 
 from conftest import skipif
 from devito import (Grid, Function, TimeFunction, SparseTimeFunction, Dimension, # noqa
@@ -63,10 +64,12 @@ class TestDataBasic(object):
         assert np.all(u.data[1, :, :, 0] == 0.)
         assert np.all(u.data[1, :, :, -1] == 0.)
         # Test slicing with negative steps
-        dat = np.array([1, 2, 3, 4])
-        u.data[0, :, 0, 0] = dat.reshape(u.data[0, :, 0, 0].shape)
-        assert (np.array(u.data[0, 2::-1, 0, 0]) == dat[2::-1]).all()
-        assert (np.array(u.data[0, 3:1:-1, 0, 0]) == dat[3:1:-1]).all()
+        env = os.environ['DEVITO_BACKEND']
+        if not env == 'yask':
+            dat = np.array([1, 2, 3, 4])
+            u.data[0, :, 0, 0] = dat
+            assert (np.array(u.data[0, 2::-1, 0, 0]) == dat[2::-1]).all()
+            assert (np.array(u.data[0, 3:1:-1, 0, 0]) == dat[3:1:-1]).all()
 
     def test_halo_indexing(self):
         """Test data packing/unpacking in presence of a halo region."""
