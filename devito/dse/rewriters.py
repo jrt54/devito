@@ -12,6 +12,7 @@ from devito.dse.aliases import collect
 from devito.dse.manipulation import (common_subexprs_elimination, collect_nested,
                                      compact_temporaries)
 from devito.logger import dse_warning as warning
+from devito.parameters import configuration
 from devito.symbolics import (bhaskara_cos, bhaskara_sin, estimate_cost, freeze,
                               iq_timeinvariant, pow_to_mul, retrieve_indexed,
                               q_affine, q_leaf, q_scalar, q_sum_of_product,
@@ -341,10 +342,19 @@ class AdvancedRewriter(BasicRewriter):
                 except IndexError:
                     warning("Failed optimisation of detected redundancies")
 
+                # Optimization: extend the limits so that they are a multiple of
+                # the SIMD vector length. This might prevent the backend compiler
+                # from generating scalar remainder loops
+                vl = configuration['platform'].simd_items_per_reg(cluster.dtype)
+                ub = lambda x: int(ceil(x / vl)) * vl
+                extended = ub(sum(writeto[-1].limits)) - sum(writeto[-1].limits)
+
+
             # Create a temporary to store `alias`
             halo = [(abs(i.lower), abs(i.upper)) for i in writeto]
             array = Array(name=template(), dimensions=writeto.dimensions, halo=halo,
                           dtype=cluster.dtype)
+            from IPython import embed; embed()
 
             # Build up the expression evaluating `alias`
             access = tuple(i.dim - i.lower for i in writeto)
