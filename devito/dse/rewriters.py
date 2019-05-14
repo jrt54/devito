@@ -5,6 +5,7 @@ from time import time
 import numpy as np
 from sympy import cos, sin
 
+from devito.parameters import configuration
 from devito.equation import Eq
 from devito.ir import (DataSpace, IterationSpace, Interval, IntervalGroup, Cluster,
                        ClusterGroup, detect_accesses, build_intervals, groupby)
@@ -15,11 +16,12 @@ from devito.logger import dse_warning as warning
 from devito.symbolics import (bhaskara_cos, bhaskara_sin, estimate_cost, freeze,
                               iq_timeinvariant, pow_to_mul, retrieve_indexed,
                               q_affine, q_leaf, q_scalar, q_sum_of_product,
-                              q_terminalop, xreplace_constrained)
+                              q_terminalop, xreplace_constrained, xreplace_indices)
 from devito.tools import flatten, generator
 from devito.types import Array, Scalar
+from devito.types import TimeDimension
 
-__all__ = ['BasicRewriter', 'AdvancedRewriter', 'AggressiveRewriter', 'CustomRewriter']
+__all__ = ['BasicRewriter', 'AdvancedRewriter', 'AggressiveRewriter', 'SkewingRewriter', 'CustomRewriter']
 
 
 class State(object):
@@ -408,8 +410,16 @@ class AggressiveRewriter(AdvancedRewriter):
 class SkewingRewriter(BasicRewriter):
     MIN_COST_ALIAS = 10
     """
-    Minimum operation count of a non-scalar alias (i.e., "redundant") expression
-    to be lifted into a vector temporary (thus increasing the memory footprint)
+    Minimum operation count of an alias (i.e., "redundant") expression
+    to be lifted into a vector temporary.
+    """
+
+    MIN_COST_ALIAS_INV = 50
+    """
+    Minimum operation count of a time-invariant alias (i.e., "redundant")
+    expression to be lifted into a vector temporary. Time-invariant aliases
+    are lifted outside of the time-marching loop, thus they will require
+    vector temporaries as big as the entire grid.
     """
 
     MIN_COST_FACTORIZE = 100
@@ -433,15 +443,22 @@ class SkewingRewriter(BasicRewriter):
         """
         skew_factor = -configuration['skew_factor']
         skew_factor = -2
-        t, mapper = None, {}
+        t, mapper, int_mapper = None, {}, {}
         skews = {}
         print("Skewing pass")
+        total_int = {}
+        temp_intervals, temp_sub_iterators, temp_directions = cluster.ispace.args
+        cnt = 0
         for dim in cluster.ispace.dimensions:
             if t is not None:
                 mapper[dim] = dim + skew_factor*t
                 skews[dim] = (skew_factor, t)
+                int_mapper[cnt] = IntervalGroup([Interval(dim,-skew_factor,-skew_factor)])
+                cnt = cnt + 1
             elif dim.is_Time:
                 if isinstance(dim, TimeDimension):
+                    int_mapper[cnt] = IntervalGroup([Interval(dim,0,0)])
+                    cnt = cnt + 1
                     t = dim
                 elif isinstance(dim.parent, TimeDimension):
                     t = dim.parent
@@ -449,7 +466,12 @@ class SkewingRewriter(BasicRewriter):
         if t is None:
             return cluster
 
+        total_int = IntervalGroup.generate('union', int_mapper[0], int_mapper[1],int_mapper[2] )
+
         cluster._skewed_loops = skews
+        new_iter_space = IterationSpace(total_int, temp_sub_iterators, temp_directions)
+
+        cluster._ispace = new_iter_space 
         processed = xreplace_indices(cluster.exprs, mapper)
         return cluster.rebuild(processed)
 
@@ -458,9 +480,8 @@ class SkewingRewriter(BasicRewriter):
         """
         Extract time-invariant subexpressions, and assign them to temporaries.
         """
-        print("Extract time invariants")
         make = lambda: Scalar(name=template(), dtype=cluster.dtype).indexify()
-        rule = iq_timeinvariant(cluster.trace)
+        rule = iq_timeinvariant(cluster.flowgraph)
         costmodel = lambda e: estimate_cost(e) > 0
         processed, found = xreplace_constrained(cluster.exprs, make, rule, costmodel)
 
@@ -507,19 +528,10 @@ class SkewingRewriter(BasicRewriter):
     @dse_pass
     def _eliminate_inter_stencil_redundancies(self, cluster, template, **kwargs):
         """
-        Search for redundancies across the expressions and expose them
-        to the later stages of the optimisation pipeline by introducing
-        new temporaries of suitable rank.
-
-        Two type of redundancies are sought:
-
-            * Time-invariants, and
-            * Across different space points
+        Search aliasing expressions and capture them into vector temporaries.
 
         Examples
         ========
-        Let ``t`` be the time dimension, ``x, y, z`` the space dimensions. Then:
-
         1) temp = (a[x,y,z]+b[x,y,z])*c[t,x,y,z]
            >>>
            ti[x,y,z] = a[x,y,z] + b[x,y,z]
@@ -532,16 +544,14 @@ class SkewingRewriter(BasicRewriter):
            temp1 = 2.0*ti[x,y,z]
            temp2 = 3.0*ti[x,y,z+1]
         """
-        print("Eliminate inter-stencil redundancies")
         if cluster.is_sparse:
             return cluster
 
         # For more information about "aliases", refer to collect.__doc__
-        mapper, aliases = collect(cluster.exprs)
+        aliases = collect(cluster.exprs)
 
         # Redundancies will be stored in space-varying temporaries
-        g = cluster.trace
-        indices = g.space_indices
+        g = cluster.flowgraph
         time_invariants = {v.rhs: g.time_invariant(v) for v in g.values()}
 
         # Find the candidate expressions
@@ -549,9 +559,11 @@ class SkewingRewriter(BasicRewriter):
         candidates = OrderedDict()
         for k, v in g.items():
             # Cost check (to keep the memory footprint under control)
-            naliases = len(mapper.get(v.rhs, []))
+            naliases = len(aliases.get(v.rhs))
             cost = estimate_cost(v, True)*naliases
-            if cost >= self.MIN_COST_ALIAS and (naliases > 1 or time_invariants[v.rhs]):
+            test0 = lambda: cost >= self.MIN_COST_ALIAS and naliases > 1
+            test1 = lambda: cost >= self.MIN_COST_ALIAS_INV and time_invariants[v.rhs]
+            if test0() or test1():
                 candidates[v.rhs] = k
             else:
                 processed.append(v)
@@ -559,49 +571,72 @@ class SkewingRewriter(BasicRewriter):
         # Create alias Clusters and all necessary substitution rules
         # for the new temporaries
         alias_clusters = ClusterGroup()
-        rules = OrderedDict()
+        subs = {}
         for origin, alias in aliases.items():
             if all(i not in candidates for i in alias.aliased):
                 continue
-            # Construct an iteration space suitable for /alias/
+
+            # Construct the `alias` iteration space
             intervals, sub_iterators, directions = cluster.ispace.args
             intervals = [Interval(i.dim, *alias.relaxed_diameter.get(i.dim, i.limits))
                          for i in cluster.ispace.intervals]
             ispace = IterationSpace(intervals, sub_iterators, directions)
-            print(intervals)
-            # Optimization: perhaps we can lift the cluster outside the time dimension
-            if all(time_invariants[i] for i in alias.aliased):
+
+            if all(time_invariants.get(i, True) for i in alias.aliased):
+                # Optimization: the alising expressions are time-invariant so
+                # we can contract the iteration space (e.g., [t, x, y] -> [x, y])
                 ispace = ispace.project(lambda i: not i.is_Time)
 
-            # Build a symbolic function for /alias/
-            intervals = ispace.intervals
-            halo = [(abs(intervals[i].lower), abs(intervals[i].upper)) for i in indices]
-            print(abs(intervals[i].lower))
-            function = Array(name=template(), dimensions=indices, halo=halo)
-            access = tuple(i - intervals[i].lower for i in indices)
+                # The write-to space
+                writeto = ispace.intervals
+            else:
+                # The write-to space
+                writeto = IntervalGroup(i for i in ispace.intervals if not i.dim.is_Time)
+
+                # Optimization: no need to retain a SpaceDimension if it does not
+                # induce a flow/anti dependence (below, `i.limits` captures this, by
+                # telling how much halo will be needed to honour such dependences)
+                dep_inducing = [i for i in writeto if any(i.limits)]
+                try:
+                    index = writeto.index(dep_inducing[0])
+                    writeto = IntervalGroup(writeto[index:])
+                except IndexError:
+                    warning("Failed optimisation of detected redundancies")
+
+            # Create a temporary to store `alias`
+            halo = [(abs(i.lower), abs(i.upper)) for i in writeto]
+            function = Array(name=template(), dimensions=writeto.dimensions, halo=halo,
+                             dtype=cluster.dtype)
+
+            # Build up the expression evaluating `alias`
+            access = tuple(i.dim - i.lower for i in writeto)
             expression = Eq(function[access], origin)
 
-            # Construct a data space suitable for /alias/
-            mapper = detect_accesses(expression)
-            parts = {k: IntervalGroup(build_intervals(v)).add(intervals)
-                     for k, v in mapper.items() if k}
-            dspace = DataSpace([i.zero() for i in intervals], parts)
-
-            # Create a new Cluster for /alias/
-            alias_clusters.append(Cluster([expression], ispace, dspace))
-
-            # Add substitution rules
+            # Create the substitution rules so that we can use the newly created
+            # temporary in place of the aliasing expressions
             for aliased, distance in alias.with_distance:
-                access = [i - intervals[i].lower + j for i, j in distance if i in indices]
-                rules[candidates[aliased]] = function[access]
-                rules[aliased] = function[access]
+                assert all(i.dim in distance.labels for i in writeto)
+                access = [i.dim - i.lower + distance[i.dim] for i in writeto]
+                if aliased in candidates:
+                    # It would *not* be in `candidates` if part of a composite alias
+                    subs[candidates[aliased]] = function[access]
+                subs[aliased] = function[access]
+
+            # Construct the `alias` data space
+            mapper = detect_accesses(expression)
+            parts = {k: IntervalGroup(build_intervals(v)).add(ispace.intervals)
+                     for k, v in mapper.items() if k}
+            dspace = DataSpace([i.zero() for i in ispace.intervals], parts)
+
+            # Create a new Cluster for `alias`
+            alias_clusters.append(Cluster([expression], ispace, dspace))
 
         # Group clusters together if possible
         alias_clusters = groupby(alias_clusters).finalize()
         alias_clusters.sort(key=lambda i: i.is_dense)
 
         # Switch temporaries in the expression trees
-        processed = [e.xreplace(rules) for e in processed]
+        processed = [e.xreplace(subs) for e in processed]
 
         return alias_clusters + [cluster.rebuild(processed)]
 
