@@ -250,13 +250,13 @@ class Decomposition(tuple):
                     glb_idx_max = self.glb_max + glb_idx_max + 1
                 # -> Do the actual conversion
                 # First check for the special case of a slice with negative step
+                if glb_idx_max is None or glb_idx_max > self.loc_abs_max:
+                    loc_max = self.loc_abs_max - base
+                elif glb_idx_max < self.loc_abs_min:
+                    return retfunc(-1, -3)
+                else:
+                    loc_max = glb_idx_max - base
                 if isinstance(glb_idx, slice) and glb_idx.step < 0:
-                    if glb_idx_max is None or glb_idx_max > self.loc_abs_max:
-                        loc_max = self.loc_abs_max - base
-                    elif glb_idx_max < self.loc_abs_min:
-                        return retfunc(-1, -3)
-                    else:
-                        loc_max = glb_idx_max - base
                     if glb_idx_min is not None:
                         if glb_idx_min < self.loc_abs_min:
                             loc_min = self.loc_abs_min - base - 1
@@ -267,19 +267,14 @@ class Decomposition(tuple):
                     else:
                         loc_min = glb_idx_min
                     return retfunc(loc_min, loc_max)
-                if glb_idx_min is None or glb_idx_min < self.loc_abs_min:
-                    loc_min = self.loc_abs_min - base
-                elif glb_idx_min > self.loc_abs_max:
-                    return retfunc(-1, -3)
                 else:
-                    loc_min = glb_idx_min - base
-                if glb_idx_max is None or glb_idx_max > self.loc_abs_max:
-                    loc_max = self.loc_abs_max - base
-                elif glb_idx_max < self.loc_abs_min:
-                    return retfunc(-1, -3)
-                else:
-                    loc_max = glb_idx_max - base
-                return retfunc(loc_min, loc_max)
+                    if glb_idx_min is None or glb_idx_min < self.loc_abs_min:
+                        loc_min = self.loc_abs_min - base
+                    elif glb_idx_min > self.loc_abs_max:
+                        return retfunc(-1, -3)
+                    else:
+                        loc_min = glb_idx_min - base
+                    return retfunc(loc_min, loc_max)
         elif len(args) == 2:
             # convert_index(offset, side)
             if self.loc_empty:

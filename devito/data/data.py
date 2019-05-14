@@ -334,7 +334,16 @@ def index_dist_to_repl(idx, decomposition):
     elif isinstance(idx, np.ndarray):
         return idx - value
     elif isinstance(idx, slice):
-        return slice(idx.start - value, idx.stop - value, idx.step)
+        #return slice(idx.start - value, idx.stop - value, idx.step)
+        if not bool(idx.step):
+            idx.step = 1
+        if idx.step < 0:
+            if idx.stop < 0:
+                return slice(idx.start - value, None, idx.step)
+            else:
+                return slice(idx.start - value, idx.stop - value, idx.step)
+        else:
+            return slice(idx.start - value, idx.stop - value, idx.step)
     else:
         raise ValueError("Cannot apply shift to type `%s`" % type(idx))
 

@@ -67,7 +67,7 @@ class TestDataBasic(object):
     def test_negative_step(self):
         """Test slicing with a negative step."""
         grid = Grid(shape=(6, 6, 6))
-        u = TimeFunction(name='u', grid=grid, space_order=1, time_order=1)
+        u = TimeFunction(name='u', grid=grid)
         u.data[:] = 0.
         dat = np.array([1, 2, 3, 4, 5, 6])
         u.data[0, :, 0, 0] = dat
@@ -483,6 +483,52 @@ class TestDataDistributed(object):
         else:
             assert np.all(u.data[2:, 2:] == myrank)
             assert u.data[:2, 2:].size == u.data[2:, :2].size == u.data[:2, :2].size == 0
+
+    @pytest.mark.parallel(mode=4)
+    def test_slicing_ns(self):
+        grid = Grid(shape=(4, 4))
+        x, y = grid.dimensions
+        glb_pos_map = grid.distributor.glb_pos_map
+        myrank = grid.distributor.myrank
+        u = Function(name='u', grid=grid, space_order=0)
+        dat = np.arange(16, dtype=int)
+        a = dat.reshape(grid.shape)
+        b = np.zeros(grid.shape, dtype=int)
+        b[::-1, ::-1] = a
+
+        assert np.all(b[0, 0] == 15)
+        # Full array
+        #u.data[:4, :4] = b[:4, :4] # works
+        #u.data[:] = b # works
+
+        ## works
+        #u.data[:3, :3] = b[:3, :3]
+        #u.data[3, :3] = b[3, :3]
+        #u.data[:3, 3] = b[:3, 3]
+        #u.data[3, 3] = b[3, 3]
+
+        # Doesn't work
+        u.data[3:1:-1, 3:1:-1] = a[:2, :2]
+        #u.data[0:2, 0:2] = b[0:2, 0:2]
+        u.data[2, :2] = b[2, :2]
+        u.data[:2, 2] = b[:2, 2]
+        u.data[2, 2] = b[2, 2]
+        u.data[3, :3] = b[3, :3]
+        u.data[:3, 3] = b[:3, 3]
+        u.data[3, 3] = b[3, 3]
+
+
+        #u.data[4, 4] = b[4, 4] 
+        ##u.data[3:1:-1, 3:1:-1] = a[0:2, 0:2]
+
+        if LEFT in glb_pos_map[x] and LEFT in glb_pos_map[y]:
+            assert np.all(u.data == [[15, 14], [11, 10]])
+        elif LEFT in glb_pos_map[x] and RIGHT in glb_pos_map[y]:
+            assert np.all(u.data == [[13, 12], [9, 8]])
+        elif RIGHT in glb_pos_map[x] and LEFT in glb_pos_map[y]:
+            assert np.all(u.data == [[7, 6], [3, 2]])
+        else:
+            assert np.all(u.data == [[5, 4], [1, 0]])
 
     @pytest.mark.parallel(mode=4)
     def test_indexing_in_views(self):
