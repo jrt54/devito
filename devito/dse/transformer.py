@@ -1,5 +1,6 @@
 from devito.ir.clusters import ClusterGroup, groupby
 from devito.dse.rewriters import BasicRewriter, AdvancedRewriter, AggressiveRewriter
+from devito.dse.promotion import scalarize
 from devito.logger import dse as log, dse_warning as warning
 from devito.parameters import configuration
 from devito.tools import flatten
@@ -63,14 +64,16 @@ def rewrite(clusters, mode='advanced'):
 
     states = [rewriter.run(c) if c.is_dense else fallback.run(c) for c in clusters]
 
-    # Print out the profiling data
+    # Print out profiling information
     print_profiling(states)
 
-    # Different clusters may have created new (smaller) clusters which are
-    # potentially groupable within a single cluster
-    clusters = groupby(flatten(i.clusters for i in states))
+    # Group together any new Clusters produced the Rewriters
+    multiclusters = [ClusterGroup(groupby(i.clusters)) for i in states]
 
-    return ClusterGroup(clusters)
+    # Turn unnecessary temporary Arrays into scalars
+    multiclusters = [scalarize(i, rewriter.template) for i in multiclusters]
+
+    return ClusterGroup(flatten(multiclusters))
 
 
 def print_profiling(states):
