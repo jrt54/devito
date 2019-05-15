@@ -508,14 +508,21 @@ class TestDataDistributed(object):
         #u.data[3, 3] = b[3, 3]
 
         # Doesn't work
+        u.data[0:2, 0:2] = b[0:2, 0:2]
+        u.data[2:, :2] = b[2:, :2]
+        u.data[:2, 2:] = b[:2, 2:]
+
+        #u.data[2:, 2:] = b[2:, 2:]        
         u.data[3:1:-1, 3:1:-1] = a[:2, :2]
+
+        #u.data[0:2, 0:2] = a[3:1:-1, 3:1:-1]
         #u.data[0:2, 0:2] = b[0:2, 0:2]
-        u.data[2, :2] = b[2, :2]
-        u.data[:2, 2] = b[:2, 2]
-        u.data[2, 2] = b[2, 2]
-        u.data[3, :3] = b[3, :3]
-        u.data[:3, 3] = b[:3, 3]
-        u.data[3, 3] = b[3, 3]
+        #u.data[2, :2] = b[2, :2]
+        #u.data[:2, 2] = b[:2, 2]
+        #u.data[2, 2] = b[2, 2]
+        #u.data[3, :3] = b[3, :3]
+        #u.data[:3, 3] = b[:3, 3]
+        #u.data[3, 3] = b[3, 3]
 
 
         #u.data[4, 4] = b[4, 4] 
