@@ -512,7 +512,7 @@ class TestDataDistributed(object):
         u.data[2:, :2] = b[2:, :2]
         u.data[:2, 2:] = b[:2, 2:]
 
-        #u.data[2:, 2:] = b[2:, 2:]        
+        #u.data[2:, 2:] = b[2:, 2:]
         u.data[3:1:-1, 3:1:-1] = a[:2, :2]
 
         #u.data[0:2, 0:2] = a[3:1:-1, 3:1:-1]
