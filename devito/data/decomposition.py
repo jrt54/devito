@@ -230,6 +230,7 @@ class Decomposition(tuple):
                 elif isinstance(glb_idx, slice):
                     if self.loc_empty:
                         return slice(-1, -3)
+                    #if glb_idx.step >= 0 or glb_idx.step is None:
                     if glb_idx.step >= 0:
                         glb_idx_min = self.glb_min if glb_idx.start is None \
                             else glb_idx.start
@@ -237,10 +238,12 @@ class Decomposition(tuple):
                             else glb_idx.stop-1
                         retfunc = lambda a, b: slice(a, b + 1, glb_idx.step)
                     else:
+                        glb_idx_min = self.glb_min if glb_idx.stop is None \
+                            else glb_idx.stop-1
                         glb_idx_max = self.glb_max if glb_idx.start is None \
                             else glb_idx.start
-                        glb_idx_min = glb_idx.stop
                         retfunc = lambda a, b: slice(b, a, glb_idx.step)
+                        #retfunc = lambda a, b: slice(b, -1, glb_idx.step)
                 else:
                     raise TypeError("Cannot convert index from `%s`" % type(glb_idx))
                 # -> Handle negative min/max
