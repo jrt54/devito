@@ -67,7 +67,7 @@ class TestDataBasic(object):
     def test_negative_step(self):
         """Test slicing with a negative step."""
         grid = Grid(shape=(6, 6, 6))
-        u = TimeFunction(name='u', grid=grid)
+        u = TimeFunction(name='u', grid=grid, dtype=np.int32)
         u.data[:] = 0.
         dat = np.array([1, 2, 3, 4, 5, 6])
         u.data[0, :, 0, 0] = dat
@@ -489,55 +489,19 @@ class TestDataDistributed(object):
         grid = Grid(shape=(4, 4))
         x, y = grid.dimensions
         glb_pos_map = grid.distributor.glb_pos_map
-        myrank = grid.distributor.myrank
+        # myrank = grid.distributor.myrank
         u = Function(name='u', grid=grid, space_order=0, dtype=np.int32)
         dat = np.arange(16, dtype=np.int32)
         a = dat.reshape(grid.shape)
         b = np.zeros(grid.shape, dtype=np.int32)
         b[::-1, ::-1] = a
-        
-        c = a[2:, 2:]
 
         assert np.all(b[0, 0] == 15)
+
         # Full array
-        #u.data[:4, :4] = b[:4, :4] # works
-        #u.data[:] = b # works
-
-        ## works
-        #u.data[:3, :3] = b[:3, :3]
-        #u.data[3, :3] = b[3, :3]
-        #u.data[:3, 3] = b[:3, 3]
-        #u.data[3, 3] = b[3, 3]
-
         # Doesn't work
-
-        #u.data[0:2, 0:2] = b[0:2, 0:2]
-        #u.data[1::-1, 1::-1] = c[:, :]
-        u.data[0, 0] = c[1, 1]
-        u.data[1, 1] = c[0, 0]
-        u.data[0, 1] = c[1, 0]
-        u.data[1, 0] = c[0, 1]
-
-        u.data[2:, :2] = b[2:, :2]
-        u.data[:2, 2:] = b[:2, 2:]
-        u.data[2:, 2:] = b[2:, 2:]
-
-        #u.data[3:1:-1, 3:1:-1] = a[:2, :2]
-        #u.data[2, 2] = b[2, 2]
-        #from IPython import embed; embed()
-
-        #u.data[0:2, 0:2] = a[3:1:-1, 3:1:-1]
-        #u.data[0:2, 0:2] = b[0:2, 0:2]
-        #u.data[2, :2] = b[2, :2]
-        #u.data[:2, 2] = b[:2, 2]
-        #u.data[2, 2] = b[2, 2]
-        #u.data[3, :3] = b[3, :3]
-        #u.data[:3, 3] = b[:3, 3]
-        #u.data[3, 3] = b[3, 3]
-
-
-        #u.data[4, 4] = b[4, 4] 
-        ##u.data[3:1:-1, 3:1:-1] = a[0:2, 0:2]
+        # u.data[1::-1, 1::-1] = a[2:, 2:]
+        u.data[:] = b  # works
 
         if LEFT in glb_pos_map[x] and LEFT in glb_pos_map[y]:
             assert np.all(u.data == [[15, 14], [11, 10]])

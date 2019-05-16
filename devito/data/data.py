@@ -316,7 +316,13 @@ def index_dist_to_repl(idx, decomposition):
         return PROJECTED if is_integer(idx) else slice(None)
 
     # Derive shift value
-    value = idx.start if isinstance(idx, slice) else idx
+    if isinstance(idx, slice):
+        if idx.step >= 0:
+            value = idx.start
+        else:
+            value = idx.stop
+    else:
+        value = idx
     if value is None:
         value = 0
     elif not is_integer(value):
@@ -334,16 +340,10 @@ def index_dist_to_repl(idx, decomposition):
     elif isinstance(idx, np.ndarray):
         return idx - value
     elif isinstance(idx, slice):
-        #return slice(idx.start - value, idx.stop - value, idx.step)
-        if not bool(idx.step):
-            idx.step = 1
         if idx.step < 0:
-            if idx.stop < 0:
+            if idx.stop is None:
                 return slice(idx.start - value, None, idx.step)
-            else:
-                return slice(idx.start - value, idx.stop - value, idx.step)
-        else:
-            return slice(idx.start - value, idx.stop - value, idx.step)
+        return slice(idx.start - value, idx.stop - value, idx.step)
     else:
         raise ValueError("Cannot apply shift to type `%s`" % type(idx))
 
