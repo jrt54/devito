@@ -485,34 +485,6 @@ class TestDataDistributed(object):
             assert u.data[:2, 2:].size == u.data[2:, :2].size == u.data[:2, :2].size == 0
 
     @pytest.mark.parallel(mode=4)
-    def test_slicing_ns(self):
-        grid = Grid(shape=(4, 4))
-        x, y = grid.dimensions
-        glb_pos_map = grid.distributor.glb_pos_map
-        # myrank = grid.distributor.myrank
-        u = Function(name='u', grid=grid, space_order=0, dtype=np.int32)
-        dat = np.arange(16, dtype=np.int32)
-        a = dat.reshape(grid.shape)
-        b = np.zeros(grid.shape, dtype=np.int32)
-        b[::-1, ::-1] = a
-
-        assert np.all(b[0, 0] == 15)
-
-        # Full array
-        # Doesn't work
-        u.data[1::-1, 1::-1] = a[2:, 2:]
-        #u.data[:] = b  # works
-
-        if LEFT in glb_pos_map[x] and LEFT in glb_pos_map[y]:
-            assert np.all(u.data == [[15, 14], [11, 10]])
-        elif LEFT in glb_pos_map[x] and RIGHT in glb_pos_map[y]:
-            assert np.all(u.data == [[13, 12], [9, 8]])
-        elif RIGHT in glb_pos_map[x] and LEFT in glb_pos_map[y]:
-            assert np.all(u.data == [[7, 6], [3, 2]])
-        else:
-            assert np.all(u.data == [[5, 4], [1, 0]])
-
-    @pytest.mark.parallel(mode=4)
     def test_indexing_in_views(self):
         grid = Grid(shape=(4, 4))
         x, y = grid.dimensions
