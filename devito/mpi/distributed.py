@@ -106,7 +106,6 @@ class AbstractDistributor(ABC):
         The global indices owned by the calling MPI rank, as a mapper from
         Dimensions to slices.
         """
-        # Maybe something here? :p
         return {d: slice(min(i), max(i) + 1)
                 for d, i in zip(self.dimensions, self.glb_numb)}
 

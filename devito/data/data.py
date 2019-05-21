@@ -317,7 +317,7 @@ def index_dist_to_repl(idx, decomposition):
 
     # Derive shift value
     if isinstance(idx, slice):
-        if idx.step >= 0:
+        if idx.step is None or idx.step >= 0:
             value = idx.start
         else:
             value = idx.stop

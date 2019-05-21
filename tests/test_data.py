@@ -500,8 +500,8 @@ class TestDataDistributed(object):
 
         # Full array
         # Doesn't work
-        # u.data[1::-1, 1::-1] = a[2:, 2:]
-        u.data[:] = b  # works
+        u.data[1::-1, 1::-1] = a[2:, 2:]
+        #u.data[:] = b  # works
 
         if LEFT in glb_pos_map[x] and LEFT in glb_pos_map[y]:
             assert np.all(u.data == [[15, 14], [11, 10]])

@@ -266,11 +266,8 @@ class Decomposition(tuple):
                 else:
                     loc_max = glb_idx_max - base
                 # Check for the special case of a slice with negative step
-                if isinstance(glb_idx, slice) and glb_idx.step < 0:
-                    if loc_min == 0:
-                        return slice(loc_max, None, glb_idx.step)
-                    else:
-                        return retfunc(loc_min, loc_max)
+                if isinstance(glb_idx, slice) and glb_idx.step < 0 and loc_min <= 0:
+                    return slice(loc_max, None, glb_idx.step)
                 else:
                     return retfunc(loc_min, loc_max)
         elif len(args) == 2:
