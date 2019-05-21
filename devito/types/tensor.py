@@ -6,9 +6,9 @@ from devito.finite_differences import Differentiable, generate_fd_shortcuts
 from devito.types.basic import Cached, _SymbolCache
 from devito.types.dense import Function, TimeFunction
 
-__all__ = ['VectorFunction', 'VectorTimeFunction']
+__all__ = ['TensorFunction', 'TensorTimeFunction']
 
-class VectorFunction(sympy.Matrix, Cached):
+class TensorFunction(sympy.Matrix, Cached):
     """
     Discretized symbol representing an array in symbolic equations.
 
@@ -112,8 +112,9 @@ class VectorFunction(sympy.Matrix, Cached):
             # Number of dimensions
             grid = kwargs.get('grid')
             comps =kwargs.get("components",
-                              [cls.sub_type(name=name+"_%s"%d.name, **kwargs)
-                               for d in grid.dimensions])
+                              [[cls.sub_type(name=name+"_%s%s"%(d2.name, d1.name), **kwargs)
+                                for d1 in grid.dimensions]
+                                for d2 in grid.dimensions])
 
             # Create the new Function object and invoke __init__
             newobj = sympy.Matrix.__new__(cls, comps)
@@ -177,7 +178,7 @@ class VectorFunction(sympy.Matrix, Cached):
     def evaluate(self):
         return self.xreplace({c: c.evaluate for c in self})
 
-class VectorTimeFunction(VectorFunction):
+class TensorTimeFunction(TensorFunction):
     """
     Discretized symbol representing an array in symbolic equations.
 
