@@ -100,6 +100,8 @@ class TensorFunction(sympy.Matrix, Cached):
     is_TimeFunction = False
     is_SparseTimeFunction = False
     sub_type = Function
+    is_MatrixLike = True
+    is_Matrix = False
 
     def __new__(cls, *args, **kwargs):
         options = kwargs.get('options', {})

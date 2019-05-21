@@ -100,6 +100,8 @@ class VectorFunction(sympy.Matrix, Cached):
     is_TimeFunction = False
     is_SparseTimeFunction = False
     sub_type = Function
+    is_MatrixLike = True
+    is_Matrix = False
 
     def __new__(cls, *args, **kwargs):
         options = kwargs.get('options', {})
@@ -111,9 +113,9 @@ class VectorFunction(sympy.Matrix, Cached):
             name = kwargs.pop('name')
             # Number of dimensions
             grid = kwargs.get('grid')
-            comps =kwargs.get("components",
-                              [cls.sub_type(name=name+"_%s"%d.name, **kwargs)
-                               for d in grid.dimensions])
+            comps = kwargs.get("components",
+                               [cls.sub_type(name=name+"_%s"%d.name, **kwargs)
+                                for d in grid.dimensions])
 
             # Create the new Function object and invoke __init__
             newobj = sympy.Matrix.__new__(cls, comps)
