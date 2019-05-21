@@ -179,6 +179,16 @@ class VectorFunction(sympy.Matrix, Cached):
     def evaluate(self):
         return self.xreplace({c: c.evaluate for c in self})
 
+    @property
+    def div(self):
+        return sum(getattr(c, "d%s"%d) for c, d in zip(self, self.indices))
+
+    def __str__(self):
+        st = ''.join([' %-2s,' % c for c in self])[1:-1]
+        return "Vector(%s)"%st
+
+    __repr__ = __str__
+
 class VectorTimeFunction(VectorFunction):
     """
     Discretized symbol representing an array in symbolic equations.
