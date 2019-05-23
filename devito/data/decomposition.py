@@ -4,7 +4,7 @@ import numpy as np
 from cached_property import cached_property
 
 from devito.data.meta import LEFT
-from devito.tools import is_integer
+from devito.tools import is_integer, as_tuple
 
 __all__ = ['Decomposition']
 
@@ -283,6 +283,91 @@ class Decomposition(tuple):
                 abs_ofs = self.glb_max - rel_ofs
                 size = top - self.loc_abs_min + 1
                 return min(top - abs_ofs, size) if abs_ofs < top else 0
+        else:
+            raise TypeError("Expected 1 or 2 arguments, found %d" % len(args))
+
+    def convert_index_global(self, *args, rel=True):
+        """
+        Convert a local index into a global index.
+
+        Parameters
+        ----------
+        *args
+            There are three possible cases:
+            * int. Given ``I``, a local index, return the corresponding
+              global local.
+            * int, DataSide.
+            * (int, int).  ?
+            * slice(a, b, c).
+        rel : bool, optional
+            If False, convert into an absolute, instead of a relative, local index.
+
+        Raises
+        ------
+        TypeError
+            If the input doesn't adhere to any of the supported format.
+
+        Examples
+        --------
+        In the following example...
+        """
+
+        rank_length = self.loc_abs_max - self.loc_abs_min
+
+        if len(args) == 1:
+            loc_idx = args[0]
+            if is_integer(loc_idx):
+                # convert_index(index)
+                # -> Check the index is in range
+                if loc_idx < 0 or loc_idx > rank_length:
+                    raise ValueError("loc_idx out of range")
+                # -> Do the actual conversion
+                else:
+                    return loc_idx + self.loc_abs_min
+            else:
+                # convert_index((min, max))
+                # convert_index(slice(...))
+                if isinstance(loc_idx, tuple):
+                    if len(loc_idx) != 2:
+                        raise TypeError("Cannot convert index from `%s`" % type(loc_idx))
+                    # FIXME: List comp.
+                    shifted = []
+                    for i in loc_idx:
+                        if i < 0 or i > rank_length:
+                            raise ValueError("loc_idx out of range")
+                        else:
+                            shifted.append(i + self.loc_abs_min)
+                        return as_tuple(shifted)
+                elif isinstance(loc_idx, slice):
+                    if loc_idx.start is not None \
+                        and loc_idx.start < 0 or loc_idx.start > rank_length:
+                        raise ValueError("loc_idx out of range")
+                    if loc_idx.start is not None \
+                        and loc_idx.stop < 0 or loc_idx.stop > rank_length:
+                        raise ValueError("loc_idx out of range")
+                    if loc_idx.step >= 0 or loc_idx.step is None:
+                        if loc_idx.start == None:
+                            glb_start = self.loc_abs_min
+                        else:
+                            glb_start = loc_idx.start + self.loc_abs_min
+                        if loc_idx.stop == None:
+                            glb_stop = self.loc_abs_max
+                        else:
+                            glb_stop = loc_idx.stop + self.loc_abs_min
+                        return slice(glb_start, glb_stop, loc_idx.step)
+                    else:
+                        if loc_idx.start == None:
+                            glb_start = self.loc_abs_max
+                        else:
+                            glb_start = loc_idx.start + self.loc_abs_min
+                        if loc_idx.stop == None:
+                            glb_stop = None
+                        else:
+                            glb_stop = loc_idx.stop + self.loc_abs_min
+                        return slice(glb_start, glb_stop, loc_idx.step)
+        elif len(args) == 2:
+            # FIXME: Do we need this case?
+            raise NotImplementedError
         else:
             raise TypeError("Expected 1 or 2 arguments, found %d" % len(args))
 
