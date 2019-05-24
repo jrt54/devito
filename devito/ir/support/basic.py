@@ -4,7 +4,7 @@ from cached_property import cached_property
 from sympy import Basic, S
 
 from devito.ir.support.space import Any, Backward
-from devito.symbolics import retrieve_terminals, q_monoaffine
+from devito.symbolics import retrieve_terminals, q_monoaffine, q_linear
 from devito.tools import (EnrichedTuple, Tag, as_tuple, is_integer,
                           filter_sorted, flatten, memoized_meth)
 from devito.types import Dimension
@@ -318,7 +318,7 @@ class IterationInstance(LabeledVector):
     def aindices(self):
         aindices = []
         for i, fi in zip(self, self.findices):
-            if q_monoaffine(i, fi, self.findices):
+            if q_linear(i, fi):
                 aindices.append(fi)
             else:
                 dims = {i for i in i.free_symbols if isinstance(i, Dimension)}
