@@ -173,9 +173,10 @@ class Data(np.ndarray):
         elif isinstance(val, np.ndarray):
             if self._is_distributed:
                 # `val` is replicated, `self` is decomposed -> `val` gets decomposed
-                val_idx = self._normalize_index(glb_idx)
+                glb_idx = self._normalize_index(glb_idx)
+                glb_idx, val = self._process_args(glb_idx, val)
                 val_idx = [index_dist_to_repl(i, dec) for i, dec in
-                           zip(val_idx, self._decomposition)]
+                           zip(glb_idx, self._decomposition)]
                 if NONLOCAL in val_idx:
                     # no-op
                     return
@@ -218,6 +219,28 @@ class Data(np.ndarray):
                          (isinstance(i, slice) and i.step is None)
                          else i for i in items]
             return as_tuple(processed)
+
+    def _process_args(self, idx, val):
+        if any(isinstance(i, slice) for i in idx):
+            processed = []
+            op = []
+            for j in idx:
+                if isinstance(j, slice) and j.step < 0:
+                    if j.start is None:
+                        stop = None
+                    else:
+                        stop = j.start + 1
+                    if j.stop is None:
+                        start = None
+                    else:
+                        start = j.stop + 1
+                    processed.append(slice(start, stop, -j.step))
+                    op.append(slice(None, None, j.step))
+                else:
+                    processed.append(j)
+            return as_tuple(processed), val[as_tuple(op)]
+        else:
+            return idx, val
 
     def _convert_index(self, glb_idx):
         glb_idx = self._normalize_index(glb_idx)

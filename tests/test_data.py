@@ -484,6 +484,21 @@ class TestDataDistributed(object):
             assert np.all(u.data[2:, 2:] == myrank)
             assert u.data[:2, 2:].size == u.data[2:, :2].size == u.data[:2, :2].size == 0
 
+        # Test slicing with a negative step
+        dat = np.arange(16, dtype=np.int32)
+        dat = dat.reshape(grid.shape)
+
+        u.data[::-1, ::-1] = dat
+
+        if LEFT in glb_pos_map[x] and LEFT in glb_pos_map[y]:
+            assert np.all(u.data == [[15, 14], [11, 10]])
+        elif LEFT in glb_pos_map[x] and RIGHT in glb_pos_map[y]:
+            assert np.all(u.data == [[13, 12], [9, 8]])
+        elif RIGHT in glb_pos_map[x] and LEFT in glb_pos_map[y]:
+            assert np.all(u.data == [[7, 6], [3, 2]])
+        else:
+            assert np.all(u.data == [[5, 4], [1, 0]])
+
     @pytest.mark.parallel(mode=4)
     def test_indexing_in_views(self):
         grid = Grid(shape=(4, 4))
