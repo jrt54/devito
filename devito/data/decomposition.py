@@ -340,27 +340,27 @@ class Decomposition(tuple):
                         return as_tuple(shifted)
                 elif isinstance(loc_idx, slice):
                     if loc_idx.start is not None \
-                        and loc_idx.start < 0 or loc_idx.start > rank_length:
+                            and loc_idx.start < 0 or loc_idx.start > rank_length:
                         raise ValueError("loc_idx out of range")
                     if loc_idx.start is not None \
-                        and loc_idx.stop < 0 or loc_idx.stop > rank_length:
+                            and loc_idx.stop < 0 or loc_idx.stop > rank_length:
                         raise ValueError("loc_idx out of range")
                     if loc_idx.step >= 0 or loc_idx.step is None:
-                        if loc_idx.start == None:
+                        if loc_idx.start is None:
                             glb_start = self.loc_abs_min
                         else:
                             glb_start = loc_idx.start + self.loc_abs_min
-                        if loc_idx.stop == None:
+                        if loc_idx.stop is None:
                             glb_stop = self.loc_abs_max
                         else:
                             glb_stop = loc_idx.stop + self.loc_abs_min
                         return slice(glb_start, glb_stop, loc_idx.step)
                     else:
-                        if loc_idx.start == None:
+                        if loc_idx.start is None:
                             glb_start = self.loc_abs_max
                         else:
                             glb_start = loc_idx.start + self.loc_abs_min
-                        if loc_idx.stop == None:
+                        if loc_idx.stop is None:
                             glb_stop = None
                         else:
                             glb_stop = loc_idx.stop + self.loc_abs_min
