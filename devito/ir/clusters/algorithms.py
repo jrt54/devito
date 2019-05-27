@@ -44,10 +44,10 @@ def schedule(clusters):
     """
     csequences = [ClusterSequence(c, c.itintervals) for c in clusters]
 
-    scheduler = Scheduler(steer, [toposort, fuse, lift])
+    scheduler = Scheduler([], [toposort, fuse, lift])
     csequences = scheduler.process(csequences)
 
-    clusters = ClusterSequence.concatenate(csequences)
+    clusters = ClusterSequence.concatenate(*csequences)
 
     return clusters
 
@@ -164,27 +164,26 @@ class Scheduler(object):
         self.postprocess = as_tuple(postprocess)
 
     def _process(self, csequences, level, prefix=None):
-        if all(level > len(cs.itintervals) for cs in csequences):
-            # Callbacks upon Conquer
-            for f in self.callbacks:
-                csequences = f(csequences, prefix)
-            return ClusterSequence(csequences, prefix)
-        else:
-            processed = []
-            # Preprocess before the Divide part
-            for f in self.preprocess:
-                csequences = f(csequences, level)
-            # Divide part
-            for prefix, g in groupby(csequences, key=lambda i: i.itintervals[:level]):
-                if level > len(prefix):
-                    continue
-                else:
-                    # Conquer part
-                    processed.extend(self._process(list(g), level + 1, prefix))
-            # Postprocess before the next Divide part
-            for f in self.postprocess:
-                processed = f(processed, level)
-            return processed
+        # Preprocess
+        for f in self.preprocess:
+            csequences = f(csequences, level)
+        # Divide part
+        processing = []
+        for pfx, g in groupby(csequences, key=lambda i: i.itintervals[:level]):
+            if level > len(pfx):
+                # Base case
+                processing.extend(list(g))
+            else:
+                # Recursion
+                processing.extend(self._process(list(g), level + 1, pfx))
+        # Conquer part (execute callbacks)
+        for f in self.callbacks:
+            processing = f(processing, prefix)
+        processed = [ClusterSequence(processing, prefix)]
+        # Postprocess
+        for f in self.postprocess:
+            processed = f(processed, level)
+        return processed
 
     def process(self, csequences):
         return self._process(csequences, 1)
