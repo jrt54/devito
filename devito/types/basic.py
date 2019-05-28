@@ -993,6 +993,9 @@ class IndexedData(sympy.IndexedBase, Pickable):
     """
 
     def __new__(cls, label, shape=None, function=None):
+        # Make sure `label` is a devito.Symbol, not a sympy.Symbol
+        if function is not None:
+            label = Symbol(label, dtype=function.dtype)
         obj = sympy.IndexedBase.__new__(cls, label, shape)
         obj.function = function
         return obj
@@ -1021,6 +1024,8 @@ class Indexed(sympy.Indexed):
     # required changes are cumbersome and many...
     is_Symbol = False
     is_Atom = False
+
+    is_Dimension = False
 
     def _hashable_content(self):
         return super(Indexed, self)._hashable_content() + (self.base.function,)
