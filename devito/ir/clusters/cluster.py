@@ -5,7 +5,7 @@ from cached_property import cached_property
 from frozendict import frozendict
 
 from devito.ir.equations import ClusterizedEq
-from devito.ir.support import DataSpace, Scope, detect_io
+from devito.ir.support import IterationSpace, DataSpace, Scope, detect_io
 from devito.symbolics import estimate_cost, retrieve_indexed
 from devito.tools import as_tuple
 
@@ -53,8 +53,9 @@ class Cluster(object):
         root = clusters[0]
         assert all(root.ispace.is_compatible(c.ispace) for c in clusters)
         exprs = chain(*[c.exprs for c in clusters])
+        ispace = IterationSpace.merge(*[c.ispace for c in clusters])
         dspace = DataSpace.merge(*[c.dspace for c in clusters])
-        return Cluster(exprs, root.ispace, dspace)
+        return Cluster(exprs, ispace, dspace)
 
     def rebuild(self, exprs):
         """
